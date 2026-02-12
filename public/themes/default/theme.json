@@ -1,0 +1,11 @@
+{
+  "id": "default",
+  "slicePx": 12,
+  "ui": {
+    "panel": "/themes/default/ui/panel.png",
+    "buttonIdle": "/themes/default/ui/button_idle.png",
+    "buttonHover": "/themes/default/ui/button_hover.png",
+    "buttonPressed": "/themes/default/ui/button_pressed.png",
+    "modal": "/themes/default/ui/modal.png"
+  }
+}
