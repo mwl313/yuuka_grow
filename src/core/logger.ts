@@ -21,8 +21,10 @@ export function pushLog(
   params?: Record<string, number | string>,
 ): GameState {
   const nextLogs = [...state.logs, encodeLog({ key, params })];
-  while (nextLogs.length > LOG_MAX_LINES) {
-    nextLogs.shift();
+  if (LOG_MAX_LINES > 0) {
+    while (nextLogs.length > LOG_MAX_LINES) {
+      nextLogs.shift();
+    }
   }
   return {
     ...state,

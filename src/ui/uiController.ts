@@ -424,6 +424,7 @@ export class UiController {
       empty.className = "log-empty";
       empty.textContent = t("log.empty");
       this.refs.logs.append(empty);
+      this.scrollLogsToBottom();
       return;
     }
 
@@ -433,6 +434,14 @@ export class UiController {
       item.textContent = this.formatLogLine(line);
       this.refs.logs.append(item);
     }
+
+    this.scrollLogsToBottom();
+  }
+
+  private scrollLogsToBottom(): void {
+    requestAnimationFrame(() => {
+      this.refs.logs.scrollTop = this.refs.logs.scrollHeight;
+    });
   }
 
   private formatLogLine(line: string): string {

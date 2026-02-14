@@ -192,12 +192,23 @@ body {
 
 .log-panel {
   padding: 12px;
+  height: clamp(180px, 26svh, 240px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#log-title {
+  margin: 0;
 }
 
 #log-list {
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0 0 0 18px;
-  min-height: 120px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .log-line,
@@ -321,7 +332,7 @@ body {
     font-size: 15px;
   }
 
-  #log-list {
-    min-height: 150px;
+  .log-panel {
+    height: 260px;
   }
 }

@@ -13,7 +13,7 @@ export const MIN_THIGH_CM = 1;
 export const STRESS_MIN = 0;
 export const STRESS_MAX = 100;
 
-export const LOG_MAX_LINES = 5;
+export const LOG_MAX_LINES = -1;
 export const HISTORY_MAX_RUNS = 20;
 
 export const WORK_BASE_MONEY = 1100;
