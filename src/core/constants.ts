@@ -157,6 +157,7 @@ export const PLACEHOLDER_COMPARE_COLOR = 0xf8de8c;
 export const PLACEHOLDER_TEXT_COLOR = "#10203a";
 
 export const ASSET_KEY_YUUKA = "yuuka";
+export const ASSET_KEY_BG_MAIN_OFFICE = "bg_main_office";
 export const ASSET_KEY_CHAIR = "chair";
 export const ASSET_KEY_DESK = "desk";
 export const ASSET_KEY_PERSON = "person";
@@ -164,6 +165,7 @@ export const ASSET_KEY_CAR = "car";
 export const ASSET_KEY_BUILDING = "building";
 
 export const ASSET_PATH_YUUKA = "/assets/yuuka.png";
+export const ASSET_PATH_BG_MAIN_OFFICE = "/assets/background/BG_MainOffice.png";
 export const ASSET_KEY_YUUKA_BODY = "yuuka_body";
 export const ASSET_KEY_YUUKA_THIGH = "yuuka_thigh";
 export const ASSET_PATH_YUUKA_BODY = "/assets/yuuka/yuuka_body.png";
@@ -182,5 +184,7 @@ export const YUUKA_TRANSITION_DURATION_MS = 650;
 export const YUUKA_FADEOUT_MS = 250;
 export const YUUKA_GIANT_GROWTH_PER_STAGE = 1.12;
 export const YUUKA_SEAM_OVERLAP_PX = 0;
+export const YUUKA_LEVEL_GROWTH_ANIM_MS = 500;
+export const YUUKA_TRANSITION_SHAKE_MAX_PX = 14;
 
 export const THEME_SLICE_FALLBACK = 12;

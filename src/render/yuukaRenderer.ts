@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import {
+  ASSET_KEY_BG_MAIN_OFFICE,
   ASSET_KEY_BUILDING,
   ASSET_KEY_CAR,
   ASSET_KEY_CHAIR,
@@ -7,6 +8,7 @@ import {
   ASSET_KEY_PERSON,
   ASSET_KEY_YUUKA_BODY,
   ASSET_KEY_YUUKA_THIGH,
+  ASSET_PATH_BG_MAIN_OFFICE,
   ASSET_PATH_YUUKA_BODY,
   ASSET_PATH_YUUKA_THIGH,
   PLACEHOLDER_COMPARE_COLOR,
@@ -19,8 +21,10 @@ import {
   YUUKA_FADEOUT_MS,
   YUUKA_FOOT_GAP_PX,
   YUUKA_GIANT_GROWTH_PER_STAGE,
+  YUUKA_LEVEL_GROWTH_ANIM_MS,
   YUUKA_LOWER_MAX_MULT_L10,
   YUUKA_SEAM_OVERLAP_PX,
+  YUUKA_TRANSITION_SHAKE_MAX_PX,
   YUUKA_TRANSITION_DURATION_MS,
   YUUKA_UPPER_JOINT_FROM_TOP_PX,
 } from "../core/constants";
@@ -42,10 +46,14 @@ class YuukaScene extends Phaser.Scene {
 
   private mode: RenderMode = "normal";
   private prevStage = 1;
+  private didInitVisual = false;
+  private scaleTween?: Phaser.Tweens.Tween;
   private transitionTween?: Phaser.Tweens.Tween;
+  private transitionShakeTween?: Phaser.Tweens.Tween;
   private upperFadeTween?: Phaser.Tweens.Tween;
   private giantBaseLowerScaleAtStage11?: number;
 
+  private bgSprite?: Phaser.GameObjects.Image;
   private upperSprite?: Phaser.GameObjects.Image;
   private lowerSprite?: Phaser.GameObjects.Image;
   private yuukaPlaceholder?: Phaser.GameObjects.Rectangle;
@@ -56,12 +64,20 @@ class YuukaScene extends Phaser.Scene {
   private debugGraphics?: Phaser.GameObjects.Graphics;
 
   preload(): void {
+    this.load.image(ASSET_KEY_BG_MAIN_OFFICE, ASSET_PATH_BG_MAIN_OFFICE);
     this.load.image(ASSET_KEY_YUUKA_BODY, ASSET_PATH_YUUKA_BODY);
     this.load.image(ASSET_KEY_YUUKA_THIGH, ASSET_PATH_YUUKA_THIGH);
   }
 
   create(): void {
     this.cameras.main.setBackgroundColor(RENDER_BG_COLOR);
+
+    if (this.textures.exists(ASSET_KEY_BG_MAIN_OFFICE)) {
+      this.bgSprite = this.add.image(0, 0, ASSET_KEY_BG_MAIN_OFFICE);
+      this.bgSprite.setOrigin(0.5, 0.5);
+      this.bgSprite.setDepth(0);
+      this.syncBackgroundToPanel();
+    }
 
     if (this.hasSplitTextures()) {
       const centerX = this.getCenterX();
@@ -120,9 +136,11 @@ class YuukaScene extends Phaser.Scene {
     this.yuukaPlaceholder?.setVisible(!splitReady);
 
     if (!splitReady) {
+      this.stopScaleTween();
       this.stopTransitionTweens();
       this.mode = "normal";
       this.giantBaseLowerScaleAtStage11 = undefined;
+      this.didInitVisual = false;
       this.updateComparison(stage);
       this.updateDebugOverlay();
       this.prevStage = stage;
@@ -145,7 +163,7 @@ class YuukaScene extends Phaser.Scene {
       this.upperSprite?.setVisible(false);
       this.upperSprite?.setAlpha(0);
       if (this.giantBaseLowerScaleAtStage11 === undefined) {
-        this.giantBaseLowerScaleAtStage11 = YUUKA_BASE_SCALE * this.scaleMultForStage(10);
+        this.giantBaseLowerScaleAtStage11 = this.getStage11BaseLowerScale();
       }
       this.applyGiantScale(stage);
     }
@@ -160,14 +178,12 @@ class YuukaScene extends Phaser.Scene {
 
     this.upperSprite.setVisible(true);
     this.upperSprite.setAlpha(1);
-    this.upperSprite.setScale(YUUKA_BASE_SCALE);
-    this.lowerSprite.setScale(lowerScale);
-
-    this.syncPositions();
+    this.animateSplitScaleTo(YUUKA_BASE_SCALE, lowerScale, true);
   }
 
   private startTransitionFromStage10To11(): void {
     if (!this.upperSprite || !this.lowerSprite) return;
+    this.stopScaleTween();
     this.stopTransitionTweens();
     this.mode = "transition";
 
@@ -180,9 +196,14 @@ class YuukaScene extends Phaser.Scene {
     this.syncPositions();
 
     const lowerNativeH = this.getLowerNativeHeight();
-    // kTarget is where lowerTopY reaches panel top (y=0): footY - (nativeH * base * lowerMult10 * k) <= 0.
-    const kTargetRaw = this.getFootY() / (lowerNativeH * base * lowerMult10);
+    // Stage 11 target:
+    // (lowerTopY + 10 * lowerScale) == 0
+    // => footY - (nativeH * lowerScale) + 10 * lowerScale == 0
+    // => lowerScale == footY / (nativeH - 10)
+    // kTarget converts the stage10 lower scale to that target scale.
+    const kTargetRaw = this.getFootY() / ((lowerNativeH - 10) * base * lowerMult10);
     const kTarget = Math.max(1, kTargetRaw);
+    this.startTransitionShake();
 
     this.transitionTween = this.tweens.addCounter({
       from: 1,
@@ -216,14 +237,12 @@ class YuukaScene extends Phaser.Scene {
 
   private applyGiantScale(stage: number): void {
     if (!this.upperSprite || !this.lowerSprite) return;
-    const base11 =
-      this.giantBaseLowerScaleAtStage11 ?? YUUKA_BASE_SCALE * this.scaleMultForStage(10);
+    const base11 = this.giantBaseLowerScaleAtStage11 ?? this.getStage11BaseLowerScale();
     const extraStages = Math.max(0, stage - 11);
     const lowerScale = base11 * Math.pow(YUUKA_GIANT_GROWTH_PER_STAGE, extraStages);
 
     this.upperSprite.setVisible(false);
-    this.lowerSprite.setScale(lowerScale);
-    this.syncPositions();
+    this.animateSplitScaleTo(this.upperSprite.scaleX || YUUKA_BASE_SCALE, lowerScale, true);
   }
 
   private scaleMultForStage(stage: number): number {
@@ -299,8 +318,88 @@ class YuukaScene extends Phaser.Scene {
   private stopTransitionTweens(): void {
     this.transitionTween?.stop();
     this.transitionTween = undefined;
+    this.transitionShakeTween?.stop();
+    this.transitionShakeTween = undefined;
+    this.cameras.main.setScroll(0, 0);
     this.upperFadeTween?.stop();
     this.upperFadeTween = undefined;
+  }
+
+  private stopScaleTween(): void {
+    this.scaleTween?.stop();
+    this.scaleTween = undefined;
+  }
+
+  private animateSplitScaleTo(
+    targetUpperScale: number,
+    targetLowerScale: number,
+    allowAnimation: boolean,
+  ): void {
+    if (!this.upperSprite || !this.lowerSprite) return;
+
+    const currentUpperScale = this.upperSprite.scaleX || targetUpperScale;
+    const currentLowerScale = this.lowerSprite.scaleX || targetLowerScale;
+    const changed =
+      Math.abs(currentUpperScale - targetUpperScale) > 0.0001 ||
+      Math.abs(currentLowerScale - targetLowerScale) > 0.0001;
+    const shouldAnimate = allowAnimation && this.didInitVisual && changed;
+
+    this.stopScaleTween();
+
+    if (!shouldAnimate) {
+      this.upperSprite.setScale(targetUpperScale);
+      this.lowerSprite.setScale(targetLowerScale);
+      this.syncPositions();
+      this.didInitVisual = true;
+      return;
+    }
+
+    const tweenState = {
+      upper: currentUpperScale,
+      lower: currentLowerScale,
+    };
+
+    this.scaleTween = this.tweens.add({
+      targets: tweenState,
+      upper: targetUpperScale,
+      lower: targetLowerScale,
+      duration: YUUKA_LEVEL_GROWTH_ANIM_MS,
+      ease: Phaser.Math.Easing.Quadratic.Out,
+      onUpdate: () => {
+        this.upperSprite?.setScale(tweenState.upper);
+        this.lowerSprite?.setScale(tweenState.lower);
+        this.syncPositions();
+      },
+      onComplete: () => {
+        this.scaleTween = undefined;
+        this.upperSprite?.setScale(targetUpperScale);
+        this.lowerSprite?.setScale(targetLowerScale);
+        this.syncPositions();
+      },
+    });
+    this.didInitVisual = true;
+  }
+
+  private startTransitionShake(): void {
+    this.transitionShakeTween?.stop();
+    this.transitionShakeTween = this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: YUUKA_TRANSITION_DURATION_MS,
+      ease: Phaser.Math.Easing.Sine.InOut,
+      onUpdate: (tween) => {
+        const progress = tween.getValue() ?? 0;
+        const envelope = Math.sin(Math.PI * progress);
+        const amplitude = YUUKA_TRANSITION_SHAKE_MAX_PX * envelope;
+        const jitterX = Phaser.Math.FloatBetween(-amplitude, amplitude);
+        const jitterY = Phaser.Math.FloatBetween(-amplitude * 0.35, amplitude * 0.35);
+        this.cameras.main.setScroll(jitterX, jitterY);
+      },
+      onComplete: () => {
+        this.transitionShakeTween = undefined;
+        this.cameras.main.setScroll(0, 0);
+      },
+    });
   }
 
   private hasSplitTextures(): boolean {
@@ -324,12 +423,36 @@ class YuukaScene extends Phaser.Scene {
     return nativeHeight > 0 ? nativeHeight : 515;
   }
 
+  private getStage11BaseLowerScale(): number {
+    const lowerNativeH = this.getLowerNativeHeight();
+    const denominator = Math.max(lowerNativeH - 10, 1);
+    return this.getFootY() / denominator;
+  }
+
   private resolveComparisonTexture(kind: ComparisonKind): string {
     if (kind === "chair") return ASSET_KEY_CHAIR;
     if (kind === "desk") return ASSET_KEY_DESK;
     if (kind === "person") return ASSET_KEY_PERSON;
     if (kind === "car") return ASSET_KEY_CAR;
     return ASSET_KEY_BUILDING;
+  }
+
+  private syncBackgroundToPanel(): void {
+    if (!this.bgSprite) return;
+    const texture = this.textures.get(ASSET_KEY_BG_MAIN_OFFICE);
+    const source = texture?.getSourceImage() as HTMLImageElement | HTMLCanvasElement | undefined;
+    if (!source) return;
+
+    const nativeWidth =
+      "naturalWidth" in source ? source.naturalWidth : "width" in source ? source.width : 0;
+    const nativeHeight =
+      "naturalHeight" in source ? source.naturalHeight : "height" in source ? source.height : 0;
+    if (nativeWidth <= 0 || nativeHeight <= 0) return;
+
+    // Keep original aspect ratio: fit by panel height, then clip overflow on left/right.
+    const scale = RENDER_HEIGHT / nativeHeight;
+    this.bgSprite.setScale(scale);
+    this.bgSprite.setPosition(RENDER_WIDTH / 2, RENDER_HEIGHT / 2);
   }
 }
 
