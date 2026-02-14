@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "GyeonggiTitleM";
+  src: url("/assets/fonts/GyeonggiTitleM.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg-top: #f1f7ff;
   --bg-bottom: #d9e9ff;
@@ -29,13 +37,19 @@ body {
 }
 
 body {
-  font-family:
-    system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-family: "GyeonggiTitleM", "Malgun Gothic", "Noto Sans KR", sans-serif;
   color: var(--text-main);
   background:
     radial-gradient(circle at 5% 5%, rgba(255, 255, 255, 0.8), transparent 28%),
     radial-gradient(circle at 85% 12%, rgba(176, 211, 255, 0.75), transparent 32%),
     linear-gradient(160deg, var(--bg-top), var(--bg-bottom));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 #app,
@@ -60,6 +74,11 @@ body {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+}
+
+#screen-lobby.active {
+  flex: 1;
+  justify-content: center;
 }
 
 .skin-panel {
@@ -146,9 +165,21 @@ body {
   gap: 12px;
 }
 
+#lobby-title {
+  margin: 0;
+  text-align: center;
+}
+
 .stack-buttons {
   display: grid;
   gap: 10px;
+}
+
+.lobby-dance {
+  width: 50%;
+  height: auto;
+  justify-self: center;
+  display: block;
 }
 
 .lobby-disclaimer {
@@ -160,6 +191,12 @@ body {
   margin: 0;
   font-size: 13px;
   opacity: 0.8;
+  text-align: center;
+}
+
+#lobby-version {
+  margin: 0;
+  text-align: center;
 }
 
 .hud-grid {

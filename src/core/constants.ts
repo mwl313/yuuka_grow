@@ -1,5 +1,5 @@
 export const APP_VERSION = "v1.3";
-export const AUTHOR_NAME = "Codex CLI";
+export const AUTHOR_NAME = "mwl313";
 export const IP_LABEL = "Blue Archive";
 
 export const DAYS_TO_SURVIVE = 100;

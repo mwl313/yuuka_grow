@@ -23,6 +23,7 @@ interface UiRefs {
   endingOverlay: HTMLElement;
   btnStart: HTMLButtonElement;
   btnSettings: HTMLButtonElement;
+  btnLeaderboard: HTMLButtonElement;
   btnCloseSettings: HTMLButtonElement;
   btnWork: HTMLButtonElement;
   btnEat: HTMLButtonElement;
@@ -103,8 +104,10 @@ export class UiController {
             <h1 id="lobby-title"></h1>
             <p id="lobby-version"></p>
             <div class="stack-buttons">
+              <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka_dance.gif" alt="" />
               <button id="btn-start" class="skin-button"></button>
               <button id="btn-settings" class="skin-button"></button>
+              <button id="btn-leaderboard" class="skin-button"></button>
             </div>
             <p id="lobby-disclaimer" class="lobby-disclaimer"></p>
             <p id="lobby-credits" class="lobby-foot"></p>
@@ -202,6 +205,7 @@ export class UiController {
       endingOverlay: pick("ending-overlay"),
       btnStart: pick("btn-start"),
       btnSettings: pick("btn-settings"),
+      btnLeaderboard: pick("btn-leaderboard"),
       btnCloseSettings: pick("btn-close-settings"),
       btnWork: pick("btn-work"),
       btnEat: pick("btn-eat"),
@@ -240,6 +244,7 @@ export class UiController {
 
     this.refs.btnStart.textContent = t("lobby.btnStart");
     this.refs.btnSettings.textContent = t("lobby.btnSettings");
+    this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
     this.refs.btnWork.textContent = t("action.work");
     this.refs.btnEat.textContent = t("action.eat");
     this.refs.btnGuest.textContent = t("action.guest");
@@ -268,6 +273,7 @@ export class UiController {
     [
       this.refs.btnStart,
       this.refs.btnSettings,
+      this.refs.btnLeaderboard,
       this.refs.btnCloseSettings,
       this.refs.btnWork,
       this.refs.btnEat,
@@ -280,6 +286,7 @@ export class UiController {
 
     this.refs.btnStart.addEventListener("click", () => this.startGame());
     this.refs.btnSettings.addEventListener("click", () => this.openSettings(true));
+    this.refs.btnLeaderboard.addEventListener("click", () => this.openLeaderboardStub());
     this.refs.btnCloseSettings.addEventListener("click", () => this.openSettings(false));
     this.refs.btnWork.addEventListener("click", () => this.handleStep(applyWork(this.state)));
     this.refs.btnEat.addEventListener("click", () => this.handleStep(applyEat(this.state)));
@@ -338,6 +345,10 @@ export class UiController {
 
   private openSettings(open: boolean): void {
     this.refs.settingsModal.classList.toggle("hidden", !open);
+  }
+
+  private openLeaderboardStub(): void {
+    window.alert(t("lobby.leaderboardStub"));
   }
 
   private showScreen(screen: ScreenId): void {
