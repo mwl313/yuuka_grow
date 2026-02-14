@@ -16,21 +16,21 @@ function createRow(label: string, value: string): HTMLLIElement {
 
 function createPlayButton(): HTMLAnchorElement {
   const button = document.createElement("a");
-  button.className = "skin-button idle share-play-button";
+  button.className = "skin-button font-title idle share-play-button";
   button.href = "./";
   button.textContent = t("share.btnPlay");
   return button;
 }
 
 export function renderSharePage(root: HTMLElement): void {
-  root.className = "share-root";
+  root.className = "share-root font-plain";
   const shell = document.createElement("main");
   shell.className = "share-shell";
 
   const card = document.createElement("section");
   card.className = "skin-panel share-card";
   const title = document.createElement("h1");
-  title.className = "share-title";
+  title.className = "share-title font-title";
   title.textContent = t("share.title");
   card.append(title);
 

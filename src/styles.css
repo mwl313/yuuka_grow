@@ -6,7 +6,17 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "GyeonggiTitleL";
+  src: url("/assets/fonts/GyeonggiTitleL.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  --font-title: "GyeonggiTitleM", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --font-plain: "GyeonggiTitleL", "Malgun Gothic", "Noto Sans KR", sans-serif;
   --bg-top: #f1f7ff;
   --bg-bottom: #d9e9ff;
   --text-main: #1f2430;
@@ -37,7 +47,7 @@ body {
 }
 
 body {
-  font-family: "GyeonggiTitleM", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  font-family: var(--font-plain);
   color: var(--text-main);
   background:
     radial-gradient(circle at 5% 5%, rgba(255, 255, 255, 0.8), transparent 28%),
@@ -50,6 +60,14 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+.font-title {
+  font-family: var(--font-title);
+}
+
+.font-plain {
+  font-family: var(--font-plain);
 }
 
 #app,

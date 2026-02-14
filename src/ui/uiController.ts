@@ -98,16 +98,16 @@ export class UiController {
 
   private buildLayout(): string {
     return `
-      <div class="app-shell">
+      <div class="app-shell font-plain">
         <section id="screen-lobby" class="screen">
           <div class="skin-panel lobby-card">
-            <h1 id="lobby-title"></h1>
+            <h1 id="lobby-title" class="font-title"></h1>
             <p id="lobby-version"></p>
             <div class="stack-buttons">
               <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka_dance.gif" alt="" />
-              <button id="btn-start" class="skin-button"></button>
-              <button id="btn-settings" class="skin-button"></button>
-              <button id="btn-leaderboard" class="skin-button"></button>
+              <button id="btn-start" class="skin-button font-title"></button>
+              <button id="btn-settings" class="skin-button font-title"></button>
+              <button id="btn-leaderboard" class="skin-button font-title"></button>
             </div>
             <p id="lobby-disclaimer" class="lobby-disclaimer"></p>
             <p id="lobby-credits" class="lobby-foot"></p>
@@ -129,20 +129,20 @@ export class UiController {
           <div id="render-host" class="skin-panel render-host"></div>
 
           <div class="skin-panel log-panel">
-            <h2 id="log-title"></h2>
+            <h2 id="log-title" class="font-title"></h2>
             <ul id="log-list"></ul>
           </div>
 
           <div class="game-controls">
-            <button id="btn-work" class="skin-button"></button>
-            <button id="btn-eat" class="skin-button"></button>
-            <button id="btn-guest" class="skin-button"></button>
+            <button id="btn-work" class="skin-button font-title"></button>
+            <button id="btn-eat" class="skin-button font-title"></button>
+            <button id="btn-guest" class="skin-button font-title"></button>
           </div>
         </section>
 
         <section id="screen-score" class="screen">
           <div class="skin-panel score-card">
-            <h2 id="score-title"></h2>
+            <h2 id="score-title" class="font-title"></h2>
             <ul class="score-list">
               <li class="score-row"><span class="score-label" id="score-label-ending"></span><span class="score-value" id="score-ending"></span></li>
               <li class="score-row"><span class="score-label" id="score-label-thigh"></span><span class="score-value" id="score-thigh"></span></li>
@@ -151,24 +151,24 @@ export class UiController {
               <li class="score-row"><span class="score-label" id="score-label-stress"></span><span class="score-value" id="score-stress"></span></li>
             </ul>
             <div class="stack-buttons">
-              <button id="btn-retry" class="skin-button"></button>
-              <button id="btn-back" class="skin-button"></button>
-              <button id="btn-share" class="skin-button"></button>
+              <button id="btn-retry" class="skin-button font-title"></button>
+              <button id="btn-back" class="skin-button font-title"></button>
+              <button id="btn-share" class="skin-button font-title"></button>
             </div>
           </div>
         </section>
 
         <div id="ending-overlay" class="overlay hidden">
           <div class="skin-panel modal-card">
-            <h2 id="ending-title"></h2>
+            <h2 id="ending-title" class="font-title"></h2>
             <p id="ending-desc"></p>
-            <button id="btn-continue" class="skin-button"></button>
+            <button id="btn-continue" class="skin-button font-title"></button>
           </div>
         </div>
 
         <div id="settings-modal" class="overlay hidden">
           <div class="skin-panel modal-card">
-            <h2 id="settings-title"></h2>
+            <h2 id="settings-title" class="font-title"></h2>
             <label class="settings-row">
               <span id="settings-bgm"></span>
               <input id="settings-bgm-range" type="range" min="0" max="1" step="${VOLUME_STEP}" />
@@ -183,7 +183,7 @@ export class UiController {
                 <option value="default"></option>
               </select>
             </label>
-            <button id="btn-close-settings" class="skin-button"></button>
+            <button id="btn-close-settings" class="skin-button font-title"></button>
           </div>
         </div>
       </div>
