@@ -33,6 +33,7 @@ export const NOA_WORK_CHARGES = 3;
 export const STAGE_THRESHOLDS = [
   53, 70, 92, 122, 161, 212, 280, 370, 488, 644, 850, 1122, 1481, 1954, 2579,
 ];
+export const STAGE_GROWTH_FACTOR_AFTER_MAX = 1.32;
 
 export const GIANT_MODE_STAGE = 11;
 export const COMPARISON_STAGE_CHAIR = 11;

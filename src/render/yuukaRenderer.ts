@@ -237,7 +237,8 @@ class YuukaScene extends Phaser.Scene {
 
   private applyGiantScale(stage: number): void {
     if (!this.upperSprite || !this.lowerSprite) return;
-    const base11 = this.giantBaseLowerScaleAtStage11 ?? this.getStage11BaseLowerScale();
+    const base11 =
+      this.giantBaseLowerScaleAtStage11 ?? this.getStage11BaseLowerScale();
     const extraStages = Math.max(0, stage - 11);
     const lowerScale = base11 * Math.pow(YUUKA_GIANT_GROWTH_PER_STAGE, extraStages);
 
