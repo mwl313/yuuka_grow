@@ -164,10 +164,23 @@ export const ASSET_KEY_CAR = "car";
 export const ASSET_KEY_BUILDING = "building";
 
 export const ASSET_PATH_YUUKA = "/assets/yuuka.png";
+export const ASSET_KEY_YUUKA_BODY = "yuuka_body";
+export const ASSET_KEY_YUUKA_THIGH = "yuuka_thigh";
+export const ASSET_PATH_YUUKA_BODY = "/assets/yuuka/yuuka_body.png";
+export const ASSET_PATH_YUUKA_THIGH = "/assets/yuuka/yuuka_thigh.png";
 export const ASSET_PATH_CHAIR = "/assets/chair.png";
 export const ASSET_PATH_DESK = "/assets/desk.png";
 export const ASSET_PATH_PERSON = "/assets/person.png";
 export const ASSET_PATH_CAR = "/assets/car.png";
 export const ASSET_PATH_BUILDING = "/assets/building.png";
+
+export const YUUKA_BASE_SCALE = 0.5;
+export const YUUKA_LOWER_MAX_MULT_L10 = 1.68;
+export const YUUKA_UPPER_JOINT_FROM_TOP_PX = 510;
+export const YUUKA_FOOT_GAP_PX = 10;
+export const YUUKA_TRANSITION_DURATION_MS = 650;
+export const YUUKA_FADEOUT_MS = 250;
+export const YUUKA_GIANT_GROWTH_PER_STAGE = 1.12;
+export const YUUKA_SEAM_OVERLAP_PX = 0;
 
 export const THEME_SLICE_FALLBACK = 12;

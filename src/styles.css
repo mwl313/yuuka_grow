@@ -164,18 +164,30 @@ body {
 
 .hud-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   font-size: 14px;
   padding: 12px;
 }
 
 .render-host {
-  padding: 8px;
-  min-height: 260px;
+  aspect-ratio: 900 / 560;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .render-host canvas {
-  border-radius: 10px;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.hud-accent {
+  color: #ff4fa3;
+  font-weight: 700;
 }
 
 .log-panel {
@@ -304,13 +316,9 @@ body {
   }
 
   .hud-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     align-items: center;
     font-size: 15px;
-  }
-
-  .render-host {
-    min-height: 420px;
   }
 
   #log-list {
