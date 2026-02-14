@@ -10,6 +10,7 @@ export type GuestId =
 export type GuestOutcomeId = "default" | "success" | "slip" | "jackpot" | "loss";
 export type StressBandId = "stable" | "neutral" | "risky" | "gambling";
 export type ComparisonKind = "chair" | "desk" | "person" | "car" | "building";
+export type LanguageCode = "ko" | "en" | "ja";
 
 export interface GameState {
   day: number;
@@ -41,6 +42,7 @@ export interface Settings {
   bgmVolume: number;
   sfxVolume: number;
   themeId: string;
+  language: LanguageCode;
 }
 
 export interface SaveData {

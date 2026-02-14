@@ -137,6 +137,7 @@ export const GUEST_IDS = [
 export const SAVE_KEY = "yuuka_save_v1";
 export const SETTINGS_KEY = "yuuka_settings_v1";
 export const DEFAULT_THEME_ID = "default";
+export const DEFAULT_LANGUAGE = "en";
 export const DEFAULT_BGM_VOLUME = 0.6;
 export const DEFAULT_SFX_VOLUME = 0.6;
 export const VOLUME_MIN = 0;

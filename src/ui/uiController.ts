@@ -5,8 +5,8 @@ import { decodeLog } from "../core/logger";
 import { defaultRng } from "../core/rng";
 import { getComparisonKind, getStage } from "../core/stage";
 import { createInitialState } from "../core/state";
-import type { GameState, RunResult, SaveData, Settings, StepResult } from "../core/types";
-import { formatNumber, t } from "../i18n";
+import type { GameState, LanguageCode, RunResult, SaveData, Settings, StepResult } from "../core/types";
+import { formatNumber, getLanguage, onLanguageChange, setLanguage, t } from "../i18n";
 import { YuukaRenderer } from "../render/yuukaRenderer";
 import { parseShareQuery, buildShareRelativeUrl } from "../share/shareLink";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
@@ -50,6 +50,8 @@ interface UiRefs {
   bgmRange: HTMLInputElement;
   sfxRange: HTMLInputElement;
   themeSelect: HTMLSelectElement;
+  languageLabel: HTMLElement;
+  languageSelect: HTMLSelectElement;
 }
 
 function wireButtonState(button: HTMLButtonElement): void {
@@ -93,6 +95,7 @@ export class UiController {
     this.renderGameUi();
     this.showScreen("lobby");
     void applyTheme(this.settings.themeId);
+    onLanguageChange(() => this.handleLanguageChanged());
     saveData(this.save);
   }
 
@@ -183,6 +186,14 @@ export class UiController {
                 <option value="default"></option>
               </select>
             </label>
+            <label class="settings-row">
+              <span id="settings-language"></span>
+              <select id="settings-language-select">
+                <option value="ko"></option>
+                <option value="en"></option>
+                <option value="ja"></option>
+              </select>
+            </label>
             <button id="btn-close-settings" class="skin-button font-title"></button>
           </div>
         </div>
@@ -232,40 +243,46 @@ export class UiController {
       bgmRange: pick("settings-bgm-range"),
       sfxRange: pick("settings-sfx-range"),
       themeSelect: pick("settings-theme-select"),
+      languageLabel: pick("settings-language"),
+      languageSelect: pick("settings-language-select"),
     };
   }
 
   private applyLabels(): void {
-    this.setText("lobby-title", t("lobby.title"));
+    this.setText("lobby-title", t("app.title"));
     this.setText("lobby-version", t("lobby.version", { version: APP_VERSION }));
     this.setText("lobby-disclaimer", t("lobby.disclaimer"));
     this.setText("lobby-credits", t("lobby.credits", { author: AUTHOR_NAME }));
     this.setText("lobby-ip", t("lobby.ip", { ip: IP_LABEL }));
 
-    this.refs.btnStart.textContent = t("lobby.btnStart");
-    this.refs.btnSettings.textContent = t("lobby.btnSettings");
+    this.refs.btnStart.textContent = t("menu.start");
+    this.refs.btnSettings.textContent = t("menu.options");
     this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
-    this.refs.btnWork.textContent = t("action.work");
-    this.refs.btnEat.textContent = t("action.eat");
-    this.refs.btnGuest.textContent = t("action.guest");
+    this.refs.btnWork.textContent = t("game.action.work");
+    this.refs.btnEat.textContent = t("game.action.eat");
+    this.refs.btnGuest.textContent = t("game.action.guest");
     this.refs.btnContinue.textContent = t("ending.continue");
     this.refs.btnRetry.textContent = t("score.btnRetry");
     this.refs.btnBack.textContent = t("score.btnBack");
-    this.refs.btnShare.textContent = t("score.btnShare");
+    this.refs.btnShare.textContent = t("result.share");
     this.refs.btnCloseSettings.textContent = t("settings.close");
 
-    this.setText("settings-title", t("settings.title"));
+    this.setText("settings-title", t("options.title"));
     this.setText("settings-bgm", t("settings.bgm"));
     this.setText("settings-sfx", t("settings.sfx"));
     this.setText("settings-theme", t("settings.theme"));
+    this.refs.languageLabel.textContent = t("options.language.label");
+    this.setSelectOptionText(this.refs.languageSelect, "ko", t("options.language.ko"));
+    this.setSelectOptionText(this.refs.languageSelect, "en", t("options.language.en"));
+    this.setSelectOptionText(this.refs.languageSelect, "ja", t("options.language.ja"));
     this.refs.themeSelect.options[0].textContent = t("settings.themeDefault");
 
-    this.setText("score-title", t("score.title"));
-    this.setText("score-label-ending", t("score.ending"));
-    this.setText("score-label-thigh", t("score.finalThigh"));
-    this.setText("score-label-day", t("score.dayReached"));
-    this.setText("score-label-credits", t("score.finalCredits"));
-    this.setText("score-label-stress", t("score.finalStress"));
+    this.setText("score-title", t("result.title"));
+    this.setText("score-label-ending", t("result.ending"));
+    this.setText("score-label-thigh", t("result.finalThigh"));
+    this.setText("score-label-day", t("result.dayReached"));
+    this.setText("score-label-credits", t("result.finalCredits"));
+    this.setText("score-label-stress", t("result.finalStress"));
     this.setText("log-title", t("log.title"));
   }
 
@@ -303,20 +320,25 @@ export class UiController {
     this.refs.bgmRange.addEventListener("input", () => this.updateSettingsFromInputs());
     this.refs.sfxRange.addEventListener("input", () => this.updateSettingsFromInputs());
     this.refs.themeSelect.addEventListener("change", () => this.updateSettingsFromInputs());
+    this.refs.languageSelect.addEventListener("change", () => this.updateSettingsFromInputs());
   }
 
   private syncSettingsUi(): void {
     this.refs.bgmRange.value = String(this.settings.bgmVolume);
     this.refs.sfxRange.value = String(this.settings.sfxVolume);
     this.refs.themeSelect.value = this.settings.themeId;
+    this.refs.languageSelect.value = this.settings.language;
   }
 
   private updateSettingsFromInputs(): void {
+    const language = this.normalizeLanguage(this.refs.languageSelect.value);
     this.settings = {
       bgmVolume: Number(this.refs.bgmRange.value),
       sfxVolume: Number(this.refs.sfxRange.value),
       themeId: this.refs.themeSelect.value,
+      language,
     };
+    setLanguage(language);
     saveSettings(this.settings);
     void applyTheme(this.settings.themeId);
   }
@@ -411,7 +433,7 @@ export class UiController {
     this.refs.hudDay.textContent = t("hud.day", { day: this.state.day });
     this.refs.hudCredits.textContent = t("hud.credits", { credits: formatNumber(this.state.money) });
     this.refs.hudStress.textContent = t("hud.stress", { stress: this.state.stress });
-    this.refs.hudThigh.textContent = t("hud.thigh", { thigh: Math.round(this.state.thighCm) });
+    this.refs.hudThigh.textContent = t("hud.thighCm", { thigh: Math.round(this.state.thighCm) });
     this.refs.hudStage.textContent = t("hud.stage", { stage });
     this.refs.hudCompare.textContent = comparison
       ? t("hud.compare", { target: t(`render.compare.${comparison}`) })
@@ -523,5 +545,33 @@ export class UiController {
   private setText(id: string, value: string): void {
     const target = this.root.querySelector<HTMLElement>(`#${id}`);
     if (target) target.textContent = value;
+  }
+
+  private normalizeLanguage(value: string): LanguageCode {
+    if (value === "ko" || value === "ja" || value === "en") return value;
+    return getLanguage();
+  }
+
+  private setSelectOptionText(select: HTMLSelectElement, value: string, text: string): void {
+    const option = [...select.options].find((item) => item.value === value);
+    if (option) {
+      option.textContent = text;
+    }
+  }
+
+  private handleLanguageChanged(): void {
+    this.settings = {
+      ...this.settings,
+      language: getLanguage(),
+    };
+    saveSettings(this.settings);
+    this.applyLabels();
+    this.syncSettingsUi();
+    this.renderGameUi();
+    if (this.latestResult) {
+      this.renderScore();
+      this.refs.endingTitle.textContent = t(`ending.${this.latestResult.endingId}.title`);
+      this.refs.endingDesc.textContent = t(`ending.${this.latestResult.endingId}.desc`);
+    }
   }
 }

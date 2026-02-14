@@ -18,7 +18,7 @@ function createPlayButton(): HTMLAnchorElement {
   const button = document.createElement("a");
   button.className = "skin-button font-title idle share-play-button";
   button.href = "./";
-  button.textContent = t("share.btnPlay");
+  button.textContent = t("share.playCta");
   return button;
 }
 
@@ -47,16 +47,16 @@ export function renderSharePage(root: HTMLElement): void {
 
   const cardTitle = document.createElement("p");
   cardTitle.className = "share-card-title";
-  cardTitle.textContent = t("share.cardTitle");
+  cardTitle.textContent = t("share.score");
 
   const list = document.createElement("ul");
   list.className = "score-list";
   list.append(
-    createRow(t("score.ending"), t(`ending.${parsed.ending}.title`)),
-    createRow(t("score.finalThigh"), t("format.cm", { value: formatNumber(parsed.thigh) })),
-    createRow(t("score.dayReached"), t("format.day", { value: formatNumber(parsed.day) })),
-    createRow(t("score.finalCredits"), t("format.credits", { value: formatNumber(parsed.money) })),
-    createRow(t("score.finalStress"), formatNumber(parsed.stress)),
+    createRow(t("result.ending"), t(`ending.${parsed.ending}.title`)),
+    createRow(t("result.finalThigh"), t("format.cm", { value: formatNumber(parsed.thigh) })),
+    createRow(t("result.dayReached"), t("format.day", { value: formatNumber(parsed.day) })),
+    createRow(t("result.finalCredits"), t("format.credits", { value: formatNumber(parsed.money) })),
+    createRow(t("result.finalStress"), formatNumber(parsed.stress)),
   );
 
   card.append(cardTitle, list, createPlayButton());
