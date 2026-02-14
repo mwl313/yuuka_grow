@@ -184,6 +184,7 @@ export const YUUKA_FOOT_GAP_PX = 10;
 export const YUUKA_TRANSITION_DURATION_MS = 650;
 export const YUUKA_FADEOUT_MS = 250;
 export const YUUKA_GIANT_GROWTH_PER_STAGE = 1.12;
+export const YUUKA_GIANT_LOG_A = 0.25;
 export const YUUKA_SEAM_OVERLAP_PX = 0;
 export const YUUKA_LEVEL_GROWTH_ANIM_MS = 500;
 export const YUUKA_TRANSITION_SHAKE_MAX_PX = 14;

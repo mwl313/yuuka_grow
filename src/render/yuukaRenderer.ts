@@ -20,7 +20,7 @@ import {
   YUUKA_BASE_SCALE,
   YUUKA_FADEOUT_MS,
   YUUKA_FOOT_GAP_PX,
-  YUUKA_GIANT_GROWTH_PER_STAGE,
+  YUUKA_GIANT_LOG_A,
   YUUKA_LEVEL_GROWTH_ANIM_MS,
   YUUKA_LOWER_MAX_MULT_L10,
   YUUKA_SEAM_OVERLAP_PX,
@@ -51,7 +51,7 @@ class YuukaScene extends Phaser.Scene {
   private transitionTween?: Phaser.Tweens.Tween;
   private transitionShakeTween?: Phaser.Tweens.Tween;
   private upperFadeTween?: Phaser.Tweens.Tween;
-  private giantBaseLowerScaleAtStage11?: number;
+  private giantBaseScale11?: number;
 
   private bgSprite?: Phaser.GameObjects.Image;
   private upperSprite?: Phaser.GameObjects.Image;
@@ -139,7 +139,7 @@ class YuukaScene extends Phaser.Scene {
       this.stopScaleTween();
       this.stopTransitionTweens();
       this.mode = "normal";
-      this.giantBaseLowerScaleAtStage11 = undefined;
+      this.giantBaseScale11 = undefined;
       this.didInitVisual = false;
       this.updateComparison(stage);
       this.updateDebugOverlay();
@@ -150,7 +150,7 @@ class YuukaScene extends Phaser.Scene {
     if (stage <= 10) {
       this.stopTransitionTweens();
       this.mode = "normal";
-      this.giantBaseLowerScaleAtStage11 = undefined;
+      this.giantBaseScale11 = undefined;
       this.applyNormalVisual(stage);
     } else if (this.prevStage === 10 && this.mode !== "giant" && this.mode !== "transition") {
       this.startTransitionFromStage10To11();
@@ -162,8 +162,8 @@ class YuukaScene extends Phaser.Scene {
       this.mode = "giant";
       this.upperSprite?.setVisible(false);
       this.upperSprite?.setAlpha(0);
-      if (this.giantBaseLowerScaleAtStage11 === undefined) {
-        this.giantBaseLowerScaleAtStage11 = this.getStage11BaseLowerScale();
+      if (this.giantBaseScale11 === undefined) {
+        this.giantBaseScale11 = this.getStage11BaseLowerScale();
       }
       this.applyGiantScale(stage);
     }
@@ -227,7 +227,9 @@ class YuukaScene extends Phaser.Scene {
             this.upperFadeTween = undefined;
             this.upperSprite.setVisible(false);
             this.mode = "giant";
-            this.giantBaseLowerScaleAtStage11 = this.lowerSprite.scaleX;
+            if (this.giantBaseScale11 === undefined) {
+              this.giantBaseScale11 = this.getStage11BaseLowerScale();
+            }
             this.applyGiantScale(this.snapshot.stage);
           },
         });
@@ -237,10 +239,10 @@ class YuukaScene extends Phaser.Scene {
 
   private applyGiantScale(stage: number): void {
     if (!this.upperSprite || !this.lowerSprite) return;
-    const base11 =
-      this.giantBaseLowerScaleAtStage11 ?? this.getStage11BaseLowerScale();
-    const extraStages = Math.max(0, stage - 11);
-    const lowerScale = base11 * Math.pow(YUUKA_GIANT_GROWTH_PER_STAGE, extraStages);
+    const base11 = this.giantBaseScale11 ?? this.getStage11BaseLowerScale();
+    this.giantBaseScale11 = base11;
+    const progress = Math.max(0, stage - 11);
+    const lowerScale = base11 + YUUKA_GIANT_LOG_A * Math.log1p(progress);
 
     this.upperSprite.setVisible(false);
     this.animateSplitScaleTo(this.upperSprite.scaleX || YUUKA_BASE_SCALE, lowerScale, true);
