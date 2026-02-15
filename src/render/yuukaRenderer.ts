@@ -41,9 +41,17 @@ import {
   GIANT_BG_CROSS_FADE_OUT_MS,
   GIANT_BG_FLASH_DROP_1_MS,
   GIANT_BG_FLASH_DROP_2_MS,
+  GIANT_BG_FLASH_DROP_3_MS,
   GIANT_BG_FLASH_PEAK_1_MS,
   GIANT_BG_FLASH_PEAK_2_MS,
+  GIANT_BG_FLASH_PEAK_3_MS,
   GIANT_TRIGGER_GROW_PLAYBACK_RATE,
+  GIANT_TRIGGER_ECHO_1_DELAY_MS,
+  GIANT_TRIGGER_ECHO_1_RATE,
+  GIANT_TRIGGER_ECHO_1_VOLUME,
+  GIANT_TRIGGER_ECHO_2_DELAY_MS,
+  GIANT_TRIGGER_ECHO_2_RATE,
+  GIANT_TRIGGER_ECHO_2_VOLUME,
   GIANT_TRIGGER_STAGE_INTERVAL,
   GIANT_TRIGGER_STAGE_START,
   GUEST_ACTION_SHAKE_ROT_RAD,
@@ -157,6 +165,8 @@ class YuukaScene extends Phaser.Scene {
   private currentWorkSfx?: Phaser.Sound.BaseSound;
   private currentStageGrowSfx?: Phaser.Sound.BaseSound;
   private currentGiantTriggerSfx?: Phaser.Sound.BaseSound;
+  private giantTriggerEchoSounds: Phaser.Sound.BaseSound[] = [];
+  private giantTriggerEchoTimers: Phaser.Time.TimerEvent[] = [];
   private giantEnterSfxA?: Phaser.Sound.BaseSound;
   private giantEnterSfxB?: Phaser.Sound.BaseSound;
   private currentBgKey = ASSET_KEY_BG_MAIN_OFFICE;
@@ -694,14 +704,16 @@ class YuukaScene extends Phaser.Scene {
     const nextRank = this.calcGiantTriggerRank(nextStage);
     if (nextRank <= prevRank) return;
 
-    this.startTransitionShake();
     this.playGiantTriggerGrowSfx();
 
     const desiredIndex = this.calcGiantBgIndexForStage(nextStage);
     if (desiredIndex > this.giantBgIndex) {
       this.giantBgIndex = desiredIndex;
       this.setGiantBackgroundWithVfx(desiredIndex);
+      return;
     }
+
+    this.startTransitionShake();
   }
 
   private calcGiantTriggerRank(stage: number): number {
@@ -732,6 +744,9 @@ class YuukaScene extends Phaser.Scene {
     if (!nextBgKey) return;
     if (!this.textures.exists(nextBgKey)) return;
     if (this.currentBgKey === nextBgKey) return;
+    if (index > 1) {
+      this.playGiantEnter2Only();
+    }
     this.playBackgroundSwapVfx(nextBgKey);
   }
 
@@ -741,6 +756,7 @@ class YuukaScene extends Phaser.Scene {
       this.setBackgroundTextureIfExists(nextBgKey);
       return;
     }
+    this.startTransitionShake();
 
     const overlay = this.add
       .rectangle(RENDER_WIDTH / 2, RENDER_HEIGHT / 2, RENDER_WIDTH, RENDER_HEIGHT, 0xffffff, 0)
@@ -765,7 +781,7 @@ class YuukaScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: overlay,
-      alpha: 0.9,
+      alpha: 1,
       duration: GIANT_BG_FLASH_PEAK_1_MS,
       onComplete: () => {
         this.tweens.killTweensOf(bgSprite);
@@ -793,14 +809,28 @@ class YuukaScene extends Phaser.Scene {
           onComplete: () => {
             this.tweens.add({
               targets: overlay,
-              alpha: 0.6,
+              alpha: 0.85,
               duration: GIANT_BG_FLASH_PEAK_2_MS,
               onComplete: () => {
                 this.tweens.add({
                   targets: overlay,
                   alpha: 0,
                   duration: GIANT_BG_FLASH_DROP_2_MS,
-                  onComplete: () => overlay.destroy(),
+                  onComplete: () => {
+                    this.tweens.add({
+                      targets: overlay,
+                      alpha: 0.6,
+                      duration: GIANT_BG_FLASH_PEAK_3_MS,
+                      onComplete: () => {
+                        this.tweens.add({
+                          targets: overlay,
+                          alpha: 0,
+                          duration: GIANT_BG_FLASH_DROP_3_MS,
+                          onComplete: () => overlay.destroy(),
+                        });
+                      },
+                    });
+                  },
                 });
               },
             });
@@ -834,20 +864,28 @@ class YuukaScene extends Phaser.Scene {
     const soundKey = this.pickRandomKey(ASSET_KEYS_GROW.filter((key) => this.cache.audio.exists(key)));
     if (!soundKey) return;
     this.stopGiantTriggerSfx();
-    const sound = this.sound.add(soundKey);
-    sound.once("complete", () => {
-      if (this.currentGiantTriggerSfx === sound) {
+    const main = this.sound.add(soundKey);
+    main.once("complete", () => {
+      if (this.currentGiantTriggerSfx === main) {
         this.currentGiantTriggerSfx = undefined;
       }
-      sound.destroy();
+      main.destroy();
     });
-    sound.once("destroy", () => {
-      if (this.currentGiantTriggerSfx === sound) {
+    main.once("destroy", () => {
+      if (this.currentGiantTriggerSfx === main) {
         this.currentGiantTriggerSfx = undefined;
       }
     });
-    sound.play({ rate: GIANT_TRIGGER_GROW_PLAYBACK_RATE });
-    this.currentGiantTriggerSfx = sound;
+    main.play({ rate: GIANT_TRIGGER_GROW_PLAYBACK_RATE });
+    this.currentGiantTriggerSfx = main;
+
+    const echo1 = this.time.delayedCall(GIANT_TRIGGER_ECHO_1_DELAY_MS, () => {
+      this.playGiantTriggerEcho(soundKey, GIANT_TRIGGER_ECHO_1_VOLUME, GIANT_TRIGGER_ECHO_1_RATE);
+    });
+    const echo2 = this.time.delayedCall(GIANT_TRIGGER_ECHO_2_DELAY_MS, () => {
+      this.playGiantTriggerEcho(soundKey, GIANT_TRIGGER_ECHO_2_VOLUME, GIANT_TRIGGER_ECHO_2_RATE);
+    });
+    this.giantTriggerEchoTimers.push(echo1, echo2);
   }
 
   private playGiantEnterSfxPair(): void {
@@ -886,6 +924,44 @@ class YuukaScene extends Phaser.Scene {
       sfxB.play();
       this.giantEnterSfxB = sfxB;
     }
+  }
+
+  private playGiantEnter2Only(): void {
+    if (this.giantEnterSfxB) {
+      this.giantEnterSfxB.stop();
+      this.giantEnterSfxB.destroy();
+      this.giantEnterSfxB = undefined;
+    }
+    if (!this.cache.audio.exists(ASSET_KEY_GIANT_ENTER_2)) return;
+
+    const sfxB = this.sound.add(ASSET_KEY_GIANT_ENTER_2);
+    sfxB.once("complete", () => {
+      if (this.giantEnterSfxB === sfxB) {
+        this.giantEnterSfxB = undefined;
+      }
+      sfxB.destroy();
+    });
+    sfxB.once("destroy", () => {
+      if (this.giantEnterSfxB === sfxB) {
+        this.giantEnterSfxB = undefined;
+      }
+    });
+    sfxB.play();
+    this.giantEnterSfxB = sfxB;
+  }
+
+  private playGiantTriggerEcho(soundKey: string, volume: number, rate: number): void {
+    if (!this.cache.audio.exists(soundKey)) return;
+    const echo = this.sound.add(soundKey);
+    this.giantTriggerEchoSounds.push(echo);
+    echo.once("complete", () => {
+      this.removeGiantTriggerEchoSound(echo);
+      echo.destroy();
+    });
+    echo.once("destroy", () => {
+      this.removeGiantTriggerEchoSound(echo);
+    });
+    echo.play({ volume, rate });
   }
 
   private playActionVfx(kind: ActionVfxKind): void {
@@ -1011,6 +1087,17 @@ class YuukaScene extends Phaser.Scene {
   }
 
   private stopGiantTriggerSfx(): void {
+    for (const timer of this.giantTriggerEchoTimers) {
+      timer.remove(false);
+    }
+    this.giantTriggerEchoTimers = [];
+
+    for (const echo of this.giantTriggerEchoSounds) {
+      echo.stop();
+      echo.destroy();
+    }
+    this.giantTriggerEchoSounds = [];
+
     if (!this.currentGiantTriggerSfx) return;
     this.currentGiantTriggerSfx.stop();
     this.currentGiantTriggerSfx.destroy();
@@ -1028,6 +1115,10 @@ class YuukaScene extends Phaser.Scene {
       this.giantEnterSfxB.destroy();
       this.giantEnterSfxB = undefined;
     }
+  }
+
+  private removeGiantTriggerEchoSound(target: Phaser.Sound.BaseSound): void {
+    this.giantTriggerEchoSounds = this.giantTriggerEchoSounds.filter((item) => item !== target);
   }
 
   private startGuestCinematic(guestKey: GuestAssetKey): void {
