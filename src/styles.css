@@ -223,6 +223,8 @@ textarea {
   gap: 6px;
   font-size: 14px;
   padding: 12px;
+  padding-right: 44px;
+  position: relative;
 }
 
 .render-host {
@@ -243,6 +245,34 @@ textarea {
 .hud-accent {
   color: #ff4fa3;
   font-weight: 700;
+}
+
+.mini-hud-button {
+  position: absolute;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#btn-mini-lobby {
+  top: 8px;
+}
+
+#btn-mini-sound {
+  bottom: 8px;
+}
+
+#btn-mini-sound.muted {
+  opacity: 0.55;
+  text-decoration: line-through;
 }
 
 .log-panel {
@@ -307,6 +337,21 @@ textarea {
 .settings-row input[type="range"],
 .settings-row select {
   min-height: 44px;
+}
+
+.confirm-card {
+  max-width: 360px;
+  text-align: center;
+}
+
+#confirm-text {
+  margin: 0 0 12px;
+}
+
+.confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .score-list {

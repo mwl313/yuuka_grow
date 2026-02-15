@@ -11,7 +11,6 @@ import { YuukaRenderer } from "../render/yuukaRenderer";
 import { parseShareQuery, buildShareRelativeUrl } from "../share/shareLink";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
-import { applyTheme } from "./theme/themeManager";
 
 type ScreenId = "lobby" | "game" | "score";
 
@@ -32,6 +31,8 @@ interface UiRefs {
   btnRetry: HTMLButtonElement;
   btnBack: HTMLButtonElement;
   btnShare: HTMLButtonElement;
+  btnMiniLobby: HTMLButtonElement;
+  btnMiniSound: HTMLButtonElement;
   hudDay: HTMLElement;
   hudCredits: HTMLElement;
   hudStress: HTMLElement;
@@ -48,9 +49,13 @@ interface UiRefs {
   scoreStress: HTMLElement;
   bgmRange: HTMLInputElement;
   sfxRange: HTMLInputElement;
-  themeSelect: HTMLSelectElement;
+  voiceRange: HTMLInputElement;
   languageLabel: HTMLElement;
   languageSelect: HTMLSelectElement;
+  confirmOverlay: HTMLElement;
+  confirmText: HTMLElement;
+  btnConfirmYes: HTMLButtonElement;
+  btnConfirmNo: HTMLButtonElement;
 }
 
 function wireButtonState(button: HTMLButtonElement): void {
@@ -93,7 +98,6 @@ export class UiController {
     this.syncSettingsUi();
     this.renderGameUi();
     this.showScreen("lobby");
-    void applyTheme(this.settings.themeId);
     onLanguageChange(() => this.handleLanguageChanged());
     saveData(this.save);
   }
@@ -125,6 +129,8 @@ export class UiController {
             <span id="hud-thigh"></span>
             <span id="hud-stage" class="hud-accent"></span>
             <span id="hud-actions"></span>
+            <button id="btn-mini-lobby" class="mini-hud-button font-title" type="button">L</button>
+            <button id="btn-mini-sound" class="mini-hud-button font-title" type="button">S</button>
           </div>
 
           <div id="render-host" class="skin-panel render-host"></div>
@@ -179,10 +185,8 @@ export class UiController {
               <input id="settings-sfx-range" type="range" min="0" max="1" step="${VOLUME_STEP}" />
             </label>
             <label class="settings-row">
-              <span id="settings-theme"></span>
-              <select id="settings-theme-select">
-                <option value="default"></option>
-              </select>
+              <span id="settings-voice"></span>
+              <input id="settings-voice-range" type="range" min="0" max="1" step="${VOLUME_STEP}" />
             </label>
             <label class="settings-row">
               <span id="settings-language"></span>
@@ -193,6 +197,16 @@ export class UiController {
               </select>
             </label>
             <button id="btn-close-settings" class="skin-button font-title"></button>
+          </div>
+        </div>
+
+        <div id="confirm-overlay" class="overlay hidden">
+          <div class="skin-panel modal-card confirm-card">
+            <p id="confirm-text"></p>
+            <div class="confirm-actions">
+              <button id="btn-confirm-yes" class="skin-button font-title"></button>
+              <button id="btn-confirm-no" class="skin-button font-title"></button>
+            </div>
           </div>
         </div>
       </div>
@@ -223,6 +237,8 @@ export class UiController {
       btnRetry: pick("btn-retry"),
       btnBack: pick("btn-back"),
       btnShare: pick("btn-share"),
+      btnMiniLobby: pick("btn-mini-lobby"),
+      btnMiniSound: pick("btn-mini-sound"),
       hudDay: pick("hud-day"),
       hudCredits: pick("hud-credits"),
       hudStress: pick("hud-stress"),
@@ -239,9 +255,13 @@ export class UiController {
       scoreStress: pick("score-stress"),
       bgmRange: pick("settings-bgm-range"),
       sfxRange: pick("settings-sfx-range"),
-      themeSelect: pick("settings-theme-select"),
+      voiceRange: pick("settings-voice-range"),
       languageLabel: pick("settings-language"),
       languageSelect: pick("settings-language-select"),
+      confirmOverlay: pick("confirm-overlay"),
+      confirmText: pick("confirm-text"),
+      btnConfirmYes: pick("btn-confirm-yes"),
+      btnConfirmNo: pick("btn-confirm-no"),
     };
   }
 
@@ -267,12 +287,14 @@ export class UiController {
     this.setText("settings-title", t("options.title"));
     this.setText("settings-bgm", t("settings.bgm"));
     this.setText("settings-sfx", t("settings.sfx"));
-    this.setText("settings-theme", t("settings.theme"));
+    this.setText("settings-voice", t("settings.voice"));
     this.refs.languageLabel.textContent = t("options.language.label");
     this.setSelectOptionText(this.refs.languageSelect, "ko", t("options.language.ko"));
     this.setSelectOptionText(this.refs.languageSelect, "en", t("options.language.en"));
     this.setSelectOptionText(this.refs.languageSelect, "ja", t("options.language.ja"));
-    this.refs.themeSelect.options[0].textContent = t("settings.themeDefault");
+    this.refs.confirmText.textContent = t("confirm.abandon.message");
+    this.refs.btnConfirmYes.textContent = t("confirm.yes");
+    this.refs.btnConfirmNo.textContent = t("confirm.no");
 
     this.setText("score-title", t("result.title"));
     this.setText("score-label-ending", t("result.ending"));
@@ -281,6 +303,7 @@ export class UiController {
     this.setText("score-label-credits", t("result.finalCredits"));
     this.setText("score-label-stress", t("result.finalStress"));
     this.setText("log-title", t("log.title"));
+    this.updateSoundToggleUi();
   }
 
   private bindEvents(): void {
@@ -296,6 +319,10 @@ export class UiController {
       this.refs.btnRetry,
       this.refs.btnBack,
       this.refs.btnShare,
+      this.refs.btnMiniLobby,
+      this.refs.btnMiniSound,
+      this.refs.btnConfirmYes,
+      this.refs.btnConfirmNo,
     ].forEach(wireButtonState);
 
     this.refs.btnStart.addEventListener("click", () => this.startGame());
@@ -313,18 +340,23 @@ export class UiController {
     this.refs.btnRetry.addEventListener("click", () => this.retryGame());
     this.refs.btnBack.addEventListener("click", () => this.showScreen("lobby"));
     this.refs.btnShare.addEventListener("click", () => this.shareResult());
+    this.refs.btnMiniLobby.addEventListener("click", () => this.openAbandonConfirm(true));
+    this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
+    this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
+    this.refs.btnConfirmNo.addEventListener("click", () => this.openAbandonConfirm(false));
 
     this.refs.bgmRange.addEventListener("input", () => this.updateSettingsFromInputs());
     this.refs.sfxRange.addEventListener("input", () => this.updateSettingsFromInputs());
-    this.refs.themeSelect.addEventListener("change", () => this.updateSettingsFromInputs());
+    this.refs.voiceRange.addEventListener("input", () => this.updateSettingsFromInputs());
     this.refs.languageSelect.addEventListener("change", () => this.updateSettingsFromInputs());
   }
 
   private syncSettingsUi(): void {
     this.refs.bgmRange.value = String(this.settings.bgmVolume);
     this.refs.sfxRange.value = String(this.settings.sfxVolume);
-    this.refs.themeSelect.value = this.settings.themeId;
+    this.refs.voiceRange.value = String(this.settings.voiceVolume);
     this.refs.languageSelect.value = this.settings.language;
+    this.updateSoundToggleUi();
   }
 
   private updateSettingsFromInputs(): void {
@@ -332,18 +364,21 @@ export class UiController {
     this.settings = {
       bgmVolume: Number(this.refs.bgmRange.value),
       sfxVolume: Number(this.refs.sfxRange.value),
-      themeId: this.refs.themeSelect.value,
+      voiceVolume: Number(this.refs.voiceRange.value),
+      masterMuted: this.settings.masterMuted,
       language,
     };
     setLanguage(language);
     saveSettings(this.settings);
-    void applyTheme(this.settings.themeId);
+    this.renderer?.updateAudioSettings(this.settings);
   }
 
   private startGame(): void {
     this.resetForNewRun();
     this.showScreen("game");
+    this.openAbandonConfirm(false);
     this.ensureRenderer();
+    this.renderer?.updateAudioSettings(this.settings);
     this.renderGameUi();
     this.toggleEnding(false);
   }
@@ -366,6 +401,31 @@ export class UiController {
     this.refs.settingsModal.classList.toggle("hidden", !open);
   }
 
+  private openAbandonConfirm(open: boolean): void {
+    this.refs.confirmOverlay.classList.toggle("hidden", !open);
+  }
+
+  private confirmAbandon(): void {
+    this.openAbandonConfirm(false);
+    this.toggleEnding(false);
+    this.resetForNewRun();
+    this.showScreen("lobby");
+  }
+
+  private toggleMasterMute(): void {
+    this.settings = {
+      ...this.settings,
+      masterMuted: !this.settings.masterMuted,
+    };
+    saveSettings(this.settings);
+    this.updateSoundToggleUi();
+    this.renderer?.updateAudioSettings(this.settings);
+  }
+
+  private updateSoundToggleUi(): void {
+    this.refs.btnMiniSound.classList.toggle("muted", this.settings.masterMuted);
+  }
+
   private openLeaderboardStub(): void {
     window.alert(t("lobby.leaderboardStub"));
   }
@@ -379,7 +439,7 @@ export class UiController {
 
   private ensureRenderer(): void {
     if (this.renderer) return;
-    this.renderer = new YuukaRenderer("render-host");
+    this.renderer = new YuukaRenderer("render-host", this.settings);
   }
 
   private handleStep(result: StepResult): void {

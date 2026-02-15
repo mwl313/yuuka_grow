@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { PhaserAudioManager, type AudioChannelConfig } from "../audio/audioManager";
 import {
   ACTION_VFX_FADE_MS,
   ACTION_VFX_MOVE_MS,
@@ -84,8 +85,7 @@ import {
 } from "../core/constants";
 import { decodeLog } from "../core/logger";
 import { getStage } from "../core/stage";
-import type { GameState } from "../core/types";
-import { GuestAudioPlayer } from "./guestAudio";
+import type { GameState, Settings } from "../core/types";
 import {
   actionImageTextureKey,
   actionSoundKey,
@@ -97,6 +97,7 @@ import {
 import {
   guestAssetKeyFromLogNameKey,
   guestTextureKey,
+  guestVoiceSoundKey,
   normalizeGuestManifest,
   resolveGuestAssetUrl,
   type GuestAssetKey,
@@ -124,6 +125,8 @@ interface ActionAssetPools {
   soundKeys: string[];
 }
 
+type GuestVoicePools = Partial<Record<GuestAssetKey, string[]>>;
+
 interface GuestActorBundle {
   actor: Phaser.GameObjects.Container;
   sprite?: Phaser.GameObjects.Image;
@@ -133,6 +136,7 @@ interface GuestActorBundle {
 type RenderMode = "normal" | "transition" | "giant";
 
 class YuukaScene extends Phaser.Scene {
+  private audioConfig: AudioChannelConfig;
   private snapshot: RenderSnapshot = {
     stage: 1,
     thighCm: START_THIGH_CM,
@@ -156,13 +160,15 @@ class YuukaScene extends Phaser.Scene {
   private yuukaPlaceholder?: Phaser.GameObjects.Rectangle;
 
   private guestManifest: GuestManifest = {};
+  private guestVoicePools: GuestVoicePools = {};
   private foodManifest: ActionManifest = { images: [], sounds: [] };
   private workManifest: ActionManifest = { images: [], sounds: [] };
   private foodPools: ActionAssetPools = { imageKeys: [], soundKeys: [] };
   private workPools: ActionAssetPools = { imageKeys: [], soundKeys: [] };
-  private readonly guestAudio = new GuestAudioPlayer();
+  private audioManager?: PhaserAudioManager;
   private currentEatSfx?: Phaser.Sound.BaseSound;
   private currentWorkSfx?: Phaser.Sound.BaseSound;
+  private currentGuestVoice?: Phaser.Sound.BaseSound;
   private currentStageGrowSfx?: Phaser.Sound.BaseSound;
   private currentGiantTriggerSfx?: Phaser.Sound.BaseSound;
   private giantTriggerEchoSounds: Phaser.Sound.BaseSound[] = [];
@@ -175,6 +181,11 @@ class YuukaScene extends Phaser.Scene {
 
   private debugEnabled = false;
   private debugGraphics?: Phaser.GameObjects.Graphics;
+
+  constructor(key: string, initialAudioConfig: AudioChannelConfig) {
+    super(key);
+    this.audioConfig = { ...initialAudioConfig };
+  }
 
   preload(): void {
     this.load.image(ASSET_KEY_BG_MAIN_OFFICE, ASSET_PATH_BG_MAIN_OFFICE);
@@ -198,6 +209,7 @@ class YuukaScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor(RENDER_BG_COLOR);
+    this.audioManager = new PhaserAudioManager(this, this.audioConfig);
     this.loadGuestManifest();
     this.loadActionManifests();
     this.queueManifestAssets();
@@ -248,18 +260,25 @@ class YuukaScene extends Phaser.Scene {
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.destroyActiveGuest(true);
-      this.guestAudio.destroy();
+      this.stopGuestVoice();
       this.stopEatSfx();
       this.stopWorkSfx();
       this.stopStageGrowSfx();
       this.stopGiantTriggerSfx();
       this.stopGiantEnterSfx();
+      this.audioManager?.destroy();
+      this.audioManager = undefined;
       this.stopScaleTween();
       this.stopTransitionTweens();
     });
 
     this.syncGiantBackgroundForStage(this.snapshot.stage);
     this.redraw();
+  }
+
+  setAudioConfig(config: AudioChannelConfig): void {
+    this.audioConfig = { ...config };
+    this.audioManager?.setConfig(config);
   }
 
   setSnapshot(snapshot: RenderSnapshot): void {
@@ -652,13 +671,26 @@ class YuukaScene extends Phaser.Scene {
 
   private queueGuestTexturesFromManifest(): boolean {
     let hasQueued = false;
+    this.guestVoicePools = {};
     const entries = Object.entries(this.guestManifest) as [GuestAssetKey, GuestManifest[GuestAssetKey]][];
     for (const [guestKey, entry] of entries) {
-      if (!entry?.image) continue;
-      const textureKey = guestTextureKey(guestKey);
-      if (this.textures.exists(textureKey)) continue;
-      this.load.image(textureKey, resolveGuestAssetUrl(entry.image));
-      hasQueued = true;
+      if (entry?.image) {
+        const textureKey = guestTextureKey(guestKey);
+        if (!this.textures.exists(textureKey)) {
+          this.load.image(textureKey, resolveGuestAssetUrl(entry.image));
+          hasQueued = true;
+        }
+      }
+
+      const voiceKeys: string[] = [];
+      for (const voicePath of entry?.voices ?? []) {
+        const soundKey = guestVoiceSoundKey(guestKey, voicePath);
+        voiceKeys.push(soundKey);
+        if (this.cache.audio.exists(soundKey)) continue;
+        this.load.audio(soundKey, resolveGuestAssetUrl(voicePath));
+        hasQueued = true;
+      }
+      this.guestVoicePools[guestKey] = voiceKeys;
     }
     return hasQueued;
   }
@@ -844,7 +876,8 @@ class YuukaScene extends Phaser.Scene {
     const soundKey = this.pickRandomKey(ASSET_KEYS_GROW.filter((key) => this.cache.audio.exists(key)));
     if (!soundKey) return;
     this.stopStageGrowSfx();
-    const sound = this.sound.add(soundKey);
+    const sound = this.audioManager?.playSfx(soundKey);
+    if (!sound) return;
     sound.once("complete", () => {
       if (this.currentStageGrowSfx === sound) {
         this.currentStageGrowSfx = undefined;
@@ -864,7 +897,8 @@ class YuukaScene extends Phaser.Scene {
     const soundKey = this.pickRandomKey(ASSET_KEYS_GROW.filter((key) => this.cache.audio.exists(key)));
     if (!soundKey) return;
     this.stopGiantTriggerSfx();
-    const main = this.sound.add(soundKey);
+    const main = this.audioManager?.playSfx(soundKey, { rate: GIANT_TRIGGER_GROW_PLAYBACK_RATE });
+    if (!main) return;
     main.once("complete", () => {
       if (this.currentGiantTriggerSfx === main) {
         this.currentGiantTriggerSfx = undefined;
@@ -876,7 +910,6 @@ class YuukaScene extends Phaser.Scene {
         this.currentGiantTriggerSfx = undefined;
       }
     });
-    main.play({ rate: GIANT_TRIGGER_GROW_PLAYBACK_RATE });
     this.currentGiantTriggerSfx = main;
 
     const echo1 = this.time.delayedCall(GIANT_TRIGGER_ECHO_1_DELAY_MS, () => {
@@ -892,37 +925,39 @@ class YuukaScene extends Phaser.Scene {
     this.stopGiantEnterSfx();
 
     if (this.cache.audio.exists(ASSET_KEY_GIANT_ENTER_1)) {
-      const sfxA = this.sound.add(ASSET_KEY_GIANT_ENTER_1);
-      sfxA.once("complete", () => {
-        if (this.giantEnterSfxA === sfxA) {
-          this.giantEnterSfxA = undefined;
-        }
-        sfxA.destroy();
-      });
-      sfxA.once("destroy", () => {
-        if (this.giantEnterSfxA === sfxA) {
-          this.giantEnterSfxA = undefined;
-        }
-      });
-      sfxA.play();
-      this.giantEnterSfxA = sfxA;
+      const sfxA = this.audioManager?.playSfx(ASSET_KEY_GIANT_ENTER_1);
+      if (sfxA) {
+        sfxA.once("complete", () => {
+          if (this.giantEnterSfxA === sfxA) {
+            this.giantEnterSfxA = undefined;
+          }
+          sfxA.destroy();
+        });
+        sfxA.once("destroy", () => {
+          if (this.giantEnterSfxA === sfxA) {
+            this.giantEnterSfxA = undefined;
+          }
+        });
+        this.giantEnterSfxA = sfxA;
+      }
     }
 
     if (this.cache.audio.exists(ASSET_KEY_GIANT_ENTER_2)) {
-      const sfxB = this.sound.add(ASSET_KEY_GIANT_ENTER_2);
-      sfxB.once("complete", () => {
-        if (this.giantEnterSfxB === sfxB) {
-          this.giantEnterSfxB = undefined;
-        }
-        sfxB.destroy();
-      });
-      sfxB.once("destroy", () => {
-        if (this.giantEnterSfxB === sfxB) {
-          this.giantEnterSfxB = undefined;
-        }
-      });
-      sfxB.play();
-      this.giantEnterSfxB = sfxB;
+      const sfxB = this.audioManager?.playSfx(ASSET_KEY_GIANT_ENTER_2);
+      if (sfxB) {
+        sfxB.once("complete", () => {
+          if (this.giantEnterSfxB === sfxB) {
+            this.giantEnterSfxB = undefined;
+          }
+          sfxB.destroy();
+        });
+        sfxB.once("destroy", () => {
+          if (this.giantEnterSfxB === sfxB) {
+            this.giantEnterSfxB = undefined;
+          }
+        });
+        this.giantEnterSfxB = sfxB;
+      }
     }
   }
 
@@ -934,7 +969,8 @@ class YuukaScene extends Phaser.Scene {
     }
     if (!this.cache.audio.exists(ASSET_KEY_GIANT_ENTER_2)) return;
 
-    const sfxB = this.sound.add(ASSET_KEY_GIANT_ENTER_2);
+    const sfxB = this.audioManager?.playSfx(ASSET_KEY_GIANT_ENTER_2);
+    if (!sfxB) return;
     sfxB.once("complete", () => {
       if (this.giantEnterSfxB === sfxB) {
         this.giantEnterSfxB = undefined;
@@ -946,13 +982,13 @@ class YuukaScene extends Phaser.Scene {
         this.giantEnterSfxB = undefined;
       }
     });
-    sfxB.play();
     this.giantEnterSfxB = sfxB;
   }
 
   private playGiantTriggerEcho(soundKey: string, volume: number, rate: number): void {
     if (!this.cache.audio.exists(soundKey)) return;
-    const echo = this.sound.add(soundKey);
+    const echo = this.audioManager?.playSfx(soundKey, { volume, rate });
+    if (!echo) return;
     this.giantTriggerEchoSounds.push(echo);
     echo.once("complete", () => {
       this.removeGiantTriggerEchoSound(echo);
@@ -961,7 +997,6 @@ class YuukaScene extends Phaser.Scene {
     echo.once("destroy", () => {
       this.removeGiantTriggerEchoSound(echo);
     });
-    echo.play({ volume, rate });
   }
 
   private playActionVfx(kind: ActionVfxKind): void {
@@ -1028,7 +1063,8 @@ class YuukaScene extends Phaser.Scene {
       this.stopWorkSfx();
     }
 
-    const sound = this.sound.add(soundKey);
+    const sound = this.audioManager?.playSfx(soundKey);
+    if (!sound) return;
     const clearCurrent = () => {
       if (kind === "food") {
         if (this.currentEatSfx === sound) {
@@ -1051,7 +1087,6 @@ class YuukaScene extends Phaser.Scene {
       }
     });
 
-    sound.play();
     if (kind === "food") {
       this.currentEatSfx = sound;
     } else {
@@ -1139,8 +1174,7 @@ class YuukaScene extends Phaser.Scene {
     };
     this.activeGuest = runtime;
 
-    const voiceUrls = this.getGuestVoiceUrls(guestKey);
-    this.guestAudio.playRandom(voiceUrls);
+    this.playGuestVoiceForGuest(guestKey);
 
     runtime.bobTween = this.startGuestBob(runtime);
     runtime.moveTween = this.tweens.add({
@@ -1202,7 +1236,7 @@ class YuukaScene extends Phaser.Scene {
     const runtime = this.activeGuest;
     this.stopGuestRuntime(runtime);
     this.activeGuest = undefined;
-    this.guestAudio.stopImmediate();
+    this.stopGuestVoice();
 
     this.tweens.add({
       targets: runtime.actor,
@@ -1219,7 +1253,7 @@ class YuukaScene extends Phaser.Scene {
     this.activeGuest = undefined;
     if (immediate) {
       runtime.actor.destroy();
-      this.guestAudio.stopImmediate();
+      this.stopGuestVoice();
       return;
     }
     this.skipActiveGuestWithFade();
@@ -1294,9 +1328,31 @@ class YuukaScene extends Phaser.Scene {
     };
   }
 
-  private getGuestVoiceUrls(guestKey: GuestAssetKey): string[] {
-    const voices = this.guestManifest[guestKey]?.voices ?? [];
-    return voices.map((voicePath) => resolveGuestAssetUrl(voicePath));
+  private playGuestVoiceForGuest(guestKey: GuestAssetKey): void {
+    this.stopGuestVoice();
+    const voiceKey = this.pickRandomKey(this.guestVoicePools[guestKey] ?? []);
+    if (!voiceKey || !this.cache.audio.exists(voiceKey)) return;
+    const sound = this.audioManager?.playVoice(voiceKey);
+    if (!sound) return;
+    sound.once("complete", () => {
+      if (this.currentGuestVoice === sound) {
+        this.currentGuestVoice = undefined;
+      }
+      sound.destroy();
+    });
+    sound.once("destroy", () => {
+      if (this.currentGuestVoice === sound) {
+        this.currentGuestVoice = undefined;
+      }
+    });
+    this.currentGuestVoice = sound;
+  }
+
+  private stopGuestVoice(): void {
+    if (!this.currentGuestVoice) return;
+    this.currentGuestVoice.stop();
+    this.currentGuestVoice.destroy();
+    this.currentGuestVoice = undefined;
   }
 }
 
@@ -1308,8 +1364,8 @@ export class YuukaRenderer {
   private initializedStageCursor = false;
   private lastStage = 1;
 
-  constructor(parentId: string) {
-    this.scene = new YuukaScene("yuuka-scene");
+  constructor(parentId: string, settings: Settings) {
+    this.scene = new YuukaScene("yuuka-scene", this.toAudioConfig(settings));
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
       width: RENDER_WIDTH,
@@ -1324,6 +1380,10 @@ export class YuukaRenderer {
     });
   }
 
+  updateAudioSettings(settings: Settings): void {
+    this.scene.setAudioConfig(this.toAudioConfig(settings));
+  }
+
   render(state: GameState): void {
     const stage = getStage(state.thighCm);
     this.scene.setSnapshot({
@@ -1336,6 +1396,15 @@ export class YuukaRenderer {
 
   destroy(): void {
     this.game.destroy(true);
+  }
+
+  private toAudioConfig(settings: Settings): AudioChannelConfig {
+    return {
+      bgmVolume: settings.bgmVolume,
+      sfxVolume: settings.sfxVolume,
+      voiceVolume: settings.voiceVolume,
+      masterMuted: settings.masterMuted,
+    };
   }
 
   private handleActionTriggers(state: GameState): void {

@@ -24,10 +24,14 @@ const ko: Record<string, string> = {
   "settings.title": "설정",
   "settings.bgm": "BGM",
   "settings.sfx": "SFX",
+  "settings.voice": "VOICE",
   "settings.theme": "테마",
   "settings.language": "언어",
   "settings.close": "닫기",
   "settings.themeDefault": "기본",
+  "confirm.abandon.message": "게임을 포기하기겠습니까?",
+  "confirm.yes": "예",
+  "confirm.no": "아니오",
 
   // HUD / resources
   "hud.day": "{day}일차",

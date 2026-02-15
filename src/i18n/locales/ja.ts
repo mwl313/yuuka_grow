@@ -24,10 +24,14 @@ const ja: Record<string, string> = {
   "settings.title": "オプション",
   "settings.bgm": "BGM",
   "settings.sfx": "SFX",
+  "settings.voice": "VOICE",
   "settings.theme": "テーマ",
   "settings.language": "言語",
   "settings.close": "閉じる",
   "settings.themeDefault": "デフォルト",
+  "confirm.abandon.message": "게임을 포기하기겠습니까?",
+  "confirm.yes": "はい",
+  "confirm.no": "いいえ",
 
   // HUD / resources
   "hud.day": "{day}日目",

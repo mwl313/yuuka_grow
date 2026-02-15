@@ -55,3 +55,8 @@ export function guestAssetKeyFromLogNameKey(nameKey: string): GuestAssetKey | nu
 export function guestTextureKey(guestKey: GuestAssetKey): string {
   return `guest_${guestKey}`;
 }
+
+export function guestVoiceSoundKey(guestKey: GuestAssetKey, relativePath: string): string {
+  const normalized = relativePath.replace(/^\/+/, "").replace(/[^a-z0-9]+/gi, "_");
+  return `guest_voice_${guestKey}_${normalized}`;
+}

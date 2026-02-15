@@ -40,7 +40,8 @@ export interface LogPayload {
 export interface Settings {
   bgmVolume: number;
   sfxVolume: number;
-  themeId: string;
+  voiceVolume: number;
+  masterMuted: boolean;
   language: LanguageCode;
 }
 

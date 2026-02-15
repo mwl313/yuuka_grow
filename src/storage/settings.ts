@@ -1,8 +1,9 @@
 import {
   DEFAULT_BGM_VOLUME,
   DEFAULT_LANGUAGE,
+  DEFAULT_MASTER_MUTED,
   DEFAULT_SFX_VOLUME,
-  DEFAULT_THEME_ID,
+  DEFAULT_VOICE_VOLUME,
   SETTINGS_KEY,
   VOLUME_MAX,
   VOLUME_MIN,
@@ -18,7 +19,8 @@ function createDefaultSettings(): Settings {
   return {
     bgmVolume: DEFAULT_BGM_VOLUME,
     sfxVolume: DEFAULT_SFX_VOLUME,
-    themeId: DEFAULT_THEME_ID,
+    voiceVolume: DEFAULT_VOICE_VOLUME,
+    masterMuted: DEFAULT_MASTER_MUTED,
     language: DEFAULT_LANGUAGE,
   };
 }
@@ -37,7 +39,11 @@ export function loadSettings(): Settings {
         typeof parsed.sfxVolume === "number"
           ? clamp(parsed.sfxVolume, VOLUME_MIN, VOLUME_MAX)
           : DEFAULT_SFX_VOLUME,
-      themeId: typeof parsed.themeId === "string" ? parsed.themeId : DEFAULT_THEME_ID,
+      voiceVolume:
+        typeof parsed.voiceVolume === "number"
+          ? clamp(parsed.voiceVolume, VOLUME_MIN, VOLUME_MAX)
+          : DEFAULT_VOICE_VOLUME,
+      masterMuted: typeof parsed.masterMuted === "boolean" ? parsed.masterMuted : DEFAULT_MASTER_MUTED,
       language: isLanguageCode(parsed.language) ? parsed.language : DEFAULT_LANGUAGE,
     };
   } catch {

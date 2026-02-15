@@ -24,10 +24,14 @@ const en: Record<string, string> = {
   "settings.title": "Options",
   "settings.bgm": "BGM",
   "settings.sfx": "SFX",
+  "settings.voice": "VOICE",
   "settings.theme": "Theme",
   "settings.language": "Language",
   "settings.close": "Close",
   "settings.themeDefault": "Default",
+  "confirm.abandon.message": "게임을 포기하기겠습니까?",
+  "confirm.yes": "Yes",
+  "confirm.no": "No",
 
   // HUD / resources
   "hud.day": "Day {day}",
