@@ -159,6 +159,41 @@ export const ASSET_KEY_YUUKA_BODY = "yuuka_body";
 export const ASSET_KEY_YUUKA_THIGH = "yuuka_thigh";
 export const ASSET_PATH_YUUKA_BODY = "/assets/yuuka/yuuka_body.png";
 export const ASSET_PATH_YUUKA_THIGH = "/assets/yuuka/yuuka_thigh.png";
+export const ASSET_KEY_GROW_1 = "grow_1";
+export const ASSET_KEY_GROW_2 = "grow_2";
+export const ASSET_KEY_GROW_3 = "grow_3";
+export const ASSET_KEY_GROW_4 = "grow_4";
+export const ASSET_PATH_GROW_1 = "/assets/grow/grow1.mp3";
+export const ASSET_PATH_GROW_2 = "/assets/grow/grow2.mp3";
+export const ASSET_PATH_GROW_3 = "/assets/grow/grow3.mp3";
+export const ASSET_PATH_GROW_4 = "/assets/grow/grow4.mp3";
+export const ASSET_KEYS_GROW = [
+  ASSET_KEY_GROW_1,
+  ASSET_KEY_GROW_2,
+  ASSET_KEY_GROW_3,
+  ASSET_KEY_GROW_4,
+] as const;
+export const ASSET_KEY_GIANT_ENTER_1 = "giant_enter_1";
+export const ASSET_KEY_GIANT_ENTER_2 = "giant_enter_2";
+export const ASSET_PATH_GIANT_ENTER_1 = "/assets/grow/giantmode/giantenter1.mp3";
+export const ASSET_PATH_GIANT_ENTER_2 = "/assets/grow/giantmode/giantenter2.mp3";
+export const ASSET_KEY_GIANT_BG_1 = "giant_bg_1";
+export const ASSET_KEY_GIANT_BG_2 = "giant_bg_2";
+export const ASSET_KEY_GIANT_BG_3 = "giant_bg_3";
+export const ASSET_KEY_GIANT_BG_4 = "giant_bg_4";
+export const ASSET_KEY_GIANT_BG_5 = "giant_bg_5";
+export const ASSET_PATH_GIANT_BG_1 = "/assets/background/giantbg1.png";
+export const ASSET_PATH_GIANT_BG_2 = "/assets/background/giantbg2.png";
+export const ASSET_PATH_GIANT_BG_3 = "/assets/background/giantbg3.png";
+export const ASSET_PATH_GIANT_BG_4 = "/assets/background/giantbg4.png";
+export const ASSET_PATH_GIANT_BG_5 = "/assets/background/giantbg5.png";
+export const ASSET_KEYS_GIANT_BG = [
+  ASSET_KEY_GIANT_BG_1,
+  ASSET_KEY_GIANT_BG_2,
+  ASSET_KEY_GIANT_BG_3,
+  ASSET_KEY_GIANT_BG_4,
+  ASSET_KEY_GIANT_BG_5,
+] as const;
 export const ASSET_KEY_GUEST_MANIFEST = "guest_manifest";
 export const ASSET_PATH_GUEST_MANIFEST = "/assets/guests/manifest.json";
 export const ASSET_KEY_FOOD_MANIFEST = "food_manifest";
@@ -205,3 +240,13 @@ export const ACTION_VFX_SPAWN_Y_RATIO = 0.5;
 export const ACTION_VFX_TARGET_X_RATIO = 0.5;
 export const ACTION_VFX_TARGET_Y_RATIO = 0.5;
 export const ACTION_VFX_PLACEHOLDER_COLOR = 0xffdca8;
+
+export const GIANT_TRIGGER_STAGE_START = 11;
+export const GIANT_TRIGGER_STAGE_INTERVAL = 7;
+export const GIANT_TRIGGER_GROW_PLAYBACK_RATE = 0.85;
+export const GIANT_BG_FLASH_PEAK_1_MS = 30;
+export const GIANT_BG_FLASH_DROP_1_MS = 90;
+export const GIANT_BG_FLASH_PEAK_2_MS = 30;
+export const GIANT_BG_FLASH_DROP_2_MS = 120;
+export const GIANT_BG_CROSS_FADE_OUT_MS = 60;
+export const GIANT_BG_CROSS_FADE_IN_MS = 120;

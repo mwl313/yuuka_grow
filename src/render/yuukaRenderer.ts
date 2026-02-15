@@ -11,17 +11,41 @@ import {
   ACTION_VFX_TARGET_X_RATIO,
   ACTION_VFX_TARGET_Y_RATIO,
   ASSET_KEY_BG_MAIN_OFFICE,
+  ASSET_KEY_GIANT_ENTER_1,
+  ASSET_KEY_GIANT_ENTER_2,
   ASSET_KEY_FOOD_MANIFEST,
   ASSET_KEY_GUEST_MANIFEST,
   ASSET_KEY_YUUKA_BODY,
   ASSET_KEY_YUUKA_THIGH,
   ASSET_KEY_WORK_MANIFEST,
+  ASSET_KEYS_GIANT_BG,
+  ASSET_KEYS_GROW,
   ASSET_PATH_BG_MAIN_OFFICE,
+  ASSET_PATH_GIANT_BG_1,
+  ASSET_PATH_GIANT_BG_2,
+  ASSET_PATH_GIANT_BG_3,
+  ASSET_PATH_GIANT_BG_4,
+  ASSET_PATH_GIANT_BG_5,
+  ASSET_PATH_GIANT_ENTER_1,
+  ASSET_PATH_GIANT_ENTER_2,
   ASSET_PATH_FOOD_MANIFEST,
   ASSET_PATH_GUEST_MANIFEST,
+  ASSET_PATH_GROW_1,
+  ASSET_PATH_GROW_2,
+  ASSET_PATH_GROW_3,
+  ASSET_PATH_GROW_4,
   ASSET_PATH_WORK_MANIFEST,
   ASSET_PATH_YUUKA_BODY,
   ASSET_PATH_YUUKA_THIGH,
+  GIANT_BG_CROSS_FADE_IN_MS,
+  GIANT_BG_CROSS_FADE_OUT_MS,
+  GIANT_BG_FLASH_DROP_1_MS,
+  GIANT_BG_FLASH_DROP_2_MS,
+  GIANT_BG_FLASH_PEAK_1_MS,
+  GIANT_BG_FLASH_PEAK_2_MS,
+  GIANT_TRIGGER_GROW_PLAYBACK_RATE,
+  GIANT_TRIGGER_STAGE_INTERVAL,
+  GIANT_TRIGGER_STAGE_START,
   GUEST_ACTION_SHAKE_ROT_RAD,
   GUEST_ACTION_SHAKE_X_PX,
   GUEST_BASE_TEXTURE_SIZE,
@@ -131,6 +155,12 @@ class YuukaScene extends Phaser.Scene {
   private readonly guestAudio = new GuestAudioPlayer();
   private currentEatSfx?: Phaser.Sound.BaseSound;
   private currentWorkSfx?: Phaser.Sound.BaseSound;
+  private currentStageGrowSfx?: Phaser.Sound.BaseSound;
+  private currentGiantTriggerSfx?: Phaser.Sound.BaseSound;
+  private giantEnterSfxA?: Phaser.Sound.BaseSound;
+  private giantEnterSfxB?: Phaser.Sound.BaseSound;
+  private currentBgKey = ASSET_KEY_BG_MAIN_OFFICE;
+  private giantBgIndex = 0;
   private activeGuest?: GuestCinematicRuntime;
 
   private debugEnabled = false;
@@ -138,8 +168,19 @@ class YuukaScene extends Phaser.Scene {
 
   preload(): void {
     this.load.image(ASSET_KEY_BG_MAIN_OFFICE, ASSET_PATH_BG_MAIN_OFFICE);
+    this.load.image(ASSET_KEYS_GIANT_BG[0], ASSET_PATH_GIANT_BG_1);
+    this.load.image(ASSET_KEYS_GIANT_BG[1], ASSET_PATH_GIANT_BG_2);
+    this.load.image(ASSET_KEYS_GIANT_BG[2], ASSET_PATH_GIANT_BG_3);
+    this.load.image(ASSET_KEYS_GIANT_BG[3], ASSET_PATH_GIANT_BG_4);
+    this.load.image(ASSET_KEYS_GIANT_BG[4], ASSET_PATH_GIANT_BG_5);
     this.load.image(ASSET_KEY_YUUKA_BODY, ASSET_PATH_YUUKA_BODY);
     this.load.image(ASSET_KEY_YUUKA_THIGH, ASSET_PATH_YUUKA_THIGH);
+    this.load.audio(ASSET_KEYS_GROW[0], ASSET_PATH_GROW_1);
+    this.load.audio(ASSET_KEYS_GROW[1], ASSET_PATH_GROW_2);
+    this.load.audio(ASSET_KEYS_GROW[2], ASSET_PATH_GROW_3);
+    this.load.audio(ASSET_KEYS_GROW[3], ASSET_PATH_GROW_4);
+    this.load.audio(ASSET_KEY_GIANT_ENTER_1, ASSET_PATH_GIANT_ENTER_1);
+    this.load.audio(ASSET_KEY_GIANT_ENTER_2, ASSET_PATH_GIANT_ENTER_2);
     this.load.json(ASSET_KEY_GUEST_MANIFEST, ASSET_PATH_GUEST_MANIFEST);
     this.load.json(ASSET_KEY_FOOD_MANIFEST, ASSET_PATH_FOOD_MANIFEST);
     this.load.json(ASSET_KEY_WORK_MANIFEST, ASSET_PATH_WORK_MANIFEST);
@@ -155,6 +196,7 @@ class YuukaScene extends Phaser.Scene {
       this.bgSprite = this.add.image(0, 0, ASSET_KEY_BG_MAIN_OFFICE);
       this.bgSprite.setOrigin(0.5, 0.5);
       this.bgSprite.setDepth(0);
+      this.currentBgKey = ASSET_KEY_BG_MAIN_OFFICE;
       this.syncBackgroundToPanel();
     }
 
@@ -199,10 +241,14 @@ class YuukaScene extends Phaser.Scene {
       this.guestAudio.destroy();
       this.stopEatSfx();
       this.stopWorkSfx();
+      this.stopStageGrowSfx();
+      this.stopGiantTriggerSfx();
+      this.stopGiantEnterSfx();
       this.stopScaleTween();
       this.stopTransitionTweens();
     });
 
+    this.syncGiantBackgroundForStage(this.snapshot.stage);
     this.redraw();
   }
 
@@ -229,6 +275,40 @@ class YuukaScene extends Phaser.Scene {
   playWorkVfx(): void {
     if (!this.sys.isActive()) return;
     this.playActionVfx("work");
+  }
+
+  handleStageChanged(prevStage: number, nextStage: number): void {
+    if (!this.sys.isActive()) return;
+    if (nextStage <= prevStage) return;
+
+    if (prevStage < GIANT_TRIGGER_STAGE_START && nextStage <= 10) {
+      this.playStageUpGrowSfx();
+      return;
+    }
+
+    if (prevStage < GIANT_TRIGGER_STAGE_START && nextStage >= GIANT_TRIGGER_STAGE_START) {
+      this.onGiantModeEntered(nextStage);
+      return;
+    }
+
+    if (prevStage >= GIANT_TRIGGER_STAGE_START) {
+      this.handleGiantStageTriggers(prevStage, nextStage);
+    }
+  }
+
+  syncGiantBackgroundForStage(stage: number): void {
+    if (stage < GIANT_TRIGGER_STAGE_START) {
+      this.giantBgIndex = 0;
+      this.setBackgroundTextureIfExists(ASSET_KEY_BG_MAIN_OFFICE);
+      return;
+    }
+
+    const index = this.calcGiantBgIndexForStage(stage);
+    this.giantBgIndex = index;
+    const key = this.getGiantBgKeyByIndex(index);
+    if (key) {
+      this.setBackgroundTextureIfExists(key);
+    }
   }
 
   private redraw(): void {
@@ -510,7 +590,8 @@ class YuukaScene extends Phaser.Scene {
 
   private syncBackgroundToPanel(): void {
     if (!this.bgSprite) return;
-    const texture = this.textures.get(ASSET_KEY_BG_MAIN_OFFICE);
+    const textureKey = this.bgSprite.texture?.key ?? this.currentBgKey;
+    const texture = this.textures.get(textureKey);
     const source = texture?.getSourceImage() as HTMLImageElement | HTMLCanvasElement | undefined;
     if (!source) return;
 
@@ -596,6 +677,215 @@ class YuukaScene extends Phaser.Scene {
     }
 
     return hasQueued;
+  }
+
+  private onGiantModeEntered(nextStage: number): void {
+    this.playGiantEnterSfxPair();
+    this.giantBgIndex = 1;
+    this.setGiantBackgroundWithVfx(1);
+
+    // Keep giant background index aligned even if stage is loaded or jumped.
+    const syncedIndex = this.calcGiantBgIndexForStage(nextStage);
+    this.giantBgIndex = Math.max(this.giantBgIndex, syncedIndex);
+  }
+
+  private handleGiantStageTriggers(prevStage: number, nextStage: number): void {
+    const prevRank = this.calcGiantTriggerRank(prevStage);
+    const nextRank = this.calcGiantTriggerRank(nextStage);
+    if (nextRank <= prevRank) return;
+
+    this.startTransitionShake();
+    this.playGiantTriggerGrowSfx();
+
+    const desiredIndex = this.calcGiantBgIndexForStage(nextStage);
+    if (desiredIndex > this.giantBgIndex) {
+      this.giantBgIndex = desiredIndex;
+      this.setGiantBackgroundWithVfx(desiredIndex);
+    }
+  }
+
+  private calcGiantTriggerRank(stage: number): number {
+    if (stage < GIANT_TRIGGER_STAGE_START) return 0;
+    return Math.floor((stage - GIANT_TRIGGER_STAGE_START) / GIANT_TRIGGER_STAGE_INTERVAL) + 1;
+  }
+
+  private calcGiantBgIndexForStage(stage: number): number {
+    return Math.min(this.calcGiantTriggerRank(stage), ASSET_KEYS_GIANT_BG.length);
+  }
+
+  private getGiantBgKeyByIndex(index: number): string | undefined {
+    if (index <= 0) return undefined;
+    return ASSET_KEYS_GIANT_BG[index - 1];
+  }
+
+  private setBackgroundTextureIfExists(textureKey: string): void {
+    if (!this.bgSprite) return;
+    if (!this.textures.exists(textureKey)) return;
+    if (this.currentBgKey === textureKey) return;
+    this.bgSprite.setTexture(textureKey);
+    this.currentBgKey = textureKey;
+    this.syncBackgroundToPanel();
+  }
+
+  private setGiantBackgroundWithVfx(index: number): void {
+    const nextBgKey = this.getGiantBgKeyByIndex(index);
+    if (!nextBgKey) return;
+    if (!this.textures.exists(nextBgKey)) return;
+    if (this.currentBgKey === nextBgKey) return;
+    this.playBackgroundSwapVfx(nextBgKey);
+  }
+
+  private playBackgroundSwapVfx(nextBgKey: string): void {
+    const bgSprite = this.bgSprite;
+    if (!bgSprite) {
+      this.setBackgroundTextureIfExists(nextBgKey);
+      return;
+    }
+
+    const overlay = this.add
+      .rectangle(RENDER_WIDTH / 2, RENDER_HEIGHT / 2, RENDER_WIDTH, RENDER_HEIGHT, 0xffffff, 0)
+      .setDepth(0.7);
+
+    const ring = this.add
+      .circle(RENDER_WIDTH / 2, RENDER_HEIGHT / 2, 64)
+      .setStrokeStyle(6, 0xffffff, 0.9)
+      .setFillStyle(0xffffff, 0)
+      .setDepth(0.75)
+      .setScale(1)
+      .setAlpha(0.6);
+
+    this.tweens.add({
+      targets: ring,
+      scale: 2.2,
+      alpha: 0,
+      duration: 200,
+      ease: Phaser.Math.Easing.Cubic.Out,
+      onComplete: () => ring.destroy(),
+    });
+
+    this.tweens.add({
+      targets: overlay,
+      alpha: 0.9,
+      duration: GIANT_BG_FLASH_PEAK_1_MS,
+      onComplete: () => {
+        this.tweens.killTweensOf(bgSprite);
+        this.tweens.add({
+          targets: bgSprite,
+          alpha: 0,
+          duration: GIANT_BG_CROSS_FADE_OUT_MS,
+          onComplete: () => {
+            bgSprite.setTexture(nextBgKey);
+            this.currentBgKey = nextBgKey;
+            this.syncBackgroundToPanel();
+            bgSprite.setAlpha(0);
+            this.tweens.add({
+              targets: bgSprite,
+              alpha: 1,
+              duration: GIANT_BG_CROSS_FADE_IN_MS,
+            });
+          },
+        });
+
+        this.tweens.add({
+          targets: overlay,
+          alpha: 0,
+          duration: GIANT_BG_FLASH_DROP_1_MS,
+          onComplete: () => {
+            this.tweens.add({
+              targets: overlay,
+              alpha: 0.6,
+              duration: GIANT_BG_FLASH_PEAK_2_MS,
+              onComplete: () => {
+                this.tweens.add({
+                  targets: overlay,
+                  alpha: 0,
+                  duration: GIANT_BG_FLASH_DROP_2_MS,
+                  onComplete: () => overlay.destroy(),
+                });
+              },
+            });
+          },
+        });
+      },
+    });
+  }
+
+  private playStageUpGrowSfx(): void {
+    const soundKey = this.pickRandomKey(ASSET_KEYS_GROW.filter((key) => this.cache.audio.exists(key)));
+    if (!soundKey) return;
+    this.stopStageGrowSfx();
+    const sound = this.sound.add(soundKey);
+    sound.once("complete", () => {
+      if (this.currentStageGrowSfx === sound) {
+        this.currentStageGrowSfx = undefined;
+      }
+      sound.destroy();
+    });
+    sound.once("destroy", () => {
+      if (this.currentStageGrowSfx === sound) {
+        this.currentStageGrowSfx = undefined;
+      }
+    });
+    sound.play();
+    this.currentStageGrowSfx = sound;
+  }
+
+  private playGiantTriggerGrowSfx(): void {
+    const soundKey = this.pickRandomKey(ASSET_KEYS_GROW.filter((key) => this.cache.audio.exists(key)));
+    if (!soundKey) return;
+    this.stopGiantTriggerSfx();
+    const sound = this.sound.add(soundKey);
+    sound.once("complete", () => {
+      if (this.currentGiantTriggerSfx === sound) {
+        this.currentGiantTriggerSfx = undefined;
+      }
+      sound.destroy();
+    });
+    sound.once("destroy", () => {
+      if (this.currentGiantTriggerSfx === sound) {
+        this.currentGiantTriggerSfx = undefined;
+      }
+    });
+    sound.play({ rate: GIANT_TRIGGER_GROW_PLAYBACK_RATE });
+    this.currentGiantTriggerSfx = sound;
+  }
+
+  private playGiantEnterSfxPair(): void {
+    this.stopGiantEnterSfx();
+
+    if (this.cache.audio.exists(ASSET_KEY_GIANT_ENTER_1)) {
+      const sfxA = this.sound.add(ASSET_KEY_GIANT_ENTER_1);
+      sfxA.once("complete", () => {
+        if (this.giantEnterSfxA === sfxA) {
+          this.giantEnterSfxA = undefined;
+        }
+        sfxA.destroy();
+      });
+      sfxA.once("destroy", () => {
+        if (this.giantEnterSfxA === sfxA) {
+          this.giantEnterSfxA = undefined;
+        }
+      });
+      sfxA.play();
+      this.giantEnterSfxA = sfxA;
+    }
+
+    if (this.cache.audio.exists(ASSET_KEY_GIANT_ENTER_2)) {
+      const sfxB = this.sound.add(ASSET_KEY_GIANT_ENTER_2);
+      sfxB.once("complete", () => {
+        if (this.giantEnterSfxB === sfxB) {
+          this.giantEnterSfxB = undefined;
+        }
+        sfxB.destroy();
+      });
+      sfxB.once("destroy", () => {
+        if (this.giantEnterSfxB === sfxB) {
+          this.giantEnterSfxB = undefined;
+        }
+      });
+      sfxB.play();
+      this.giantEnterSfxB = sfxB;
+    }
   }
 
   private playActionVfx(kind: ActionVfxKind): void {
@@ -711,6 +1001,33 @@ class YuukaScene extends Phaser.Scene {
     this.currentWorkSfx.stop();
     this.currentWorkSfx.destroy();
     this.currentWorkSfx = undefined;
+  }
+
+  private stopStageGrowSfx(): void {
+    if (!this.currentStageGrowSfx) return;
+    this.currentStageGrowSfx.stop();
+    this.currentStageGrowSfx.destroy();
+    this.currentStageGrowSfx = undefined;
+  }
+
+  private stopGiantTriggerSfx(): void {
+    if (!this.currentGiantTriggerSfx) return;
+    this.currentGiantTriggerSfx.stop();
+    this.currentGiantTriggerSfx.destroy();
+    this.currentGiantTriggerSfx = undefined;
+  }
+
+  private stopGiantEnterSfx(): void {
+    if (this.giantEnterSfxA) {
+      this.giantEnterSfxA.stop();
+      this.giantEnterSfxA.destroy();
+      this.giantEnterSfxA = undefined;
+    }
+    if (this.giantEnterSfxB) {
+      this.giantEnterSfxB.stop();
+      this.giantEnterSfxB.destroy();
+      this.giantEnterSfxB = undefined;
+    }
   }
 
   private startGuestCinematic(guestKey: GuestAssetKey): void {
@@ -897,6 +1214,8 @@ export class YuukaRenderer {
   private readonly game: Phaser.Game;
   private initializedLogCursor = false;
   private processedLogCount = 0;
+  private initializedStageCursor = false;
+  private lastStage = 1;
 
   constructor(parentId: string) {
     this.scene = new YuukaScene("yuuka-scene");
@@ -915,10 +1234,12 @@ export class YuukaRenderer {
   }
 
   render(state: GameState): void {
+    const stage = getStage(state.thighCm);
     this.scene.setSnapshot({
-      stage: getStage(state.thighCm),
+      stage,
       thighCm: state.thighCm,
     });
+    this.handleStageTransitions(stage);
     this.handleActionTriggers(state);
   }
 
@@ -961,5 +1282,26 @@ export class YuukaRenderer {
     }
 
     this.processedLogCount = state.logs.length;
+  }
+
+  private handleStageTransitions(stage: number): void {
+    if (!this.initializedStageCursor) {
+      this.initializedStageCursor = true;
+      this.lastStage = stage;
+      this.scene.syncGiantBackgroundForStage(stage);
+      return;
+    }
+
+    const prevStage = this.lastStage;
+    this.lastStage = stage;
+
+    if (stage === prevStage) return;
+
+    if (stage < GIANT_TRIGGER_STAGE_START && prevStage >= GIANT_TRIGGER_STAGE_START) {
+      this.scene.syncGiantBackgroundForStage(stage);
+      return;
+    }
+
+    this.scene.handleStageChanged(prevStage, stage);
   }
 }
