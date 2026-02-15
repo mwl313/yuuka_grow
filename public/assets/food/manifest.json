@@ -1,0 +1,14 @@
+{
+  "images": [
+    "image/food1.webp",
+    "image/food2.webp",
+    "image/food3.webp",
+    "image/food4.webp",
+    "image/food5.webp"
+  ],
+  "sounds": [
+    "sound/food1.wav",
+    "sound/food2.wav",
+    "sound/food3.wav"
+  ]
+}

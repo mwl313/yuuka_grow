@@ -5,11 +5,15 @@
 
 ## 로컬 실행
 1. `npm install`
-2. 게스트 에셋을 바꿨다면 `npm run build:guests-manifest`로 `public/assets/guests/manifest.json`을 갱신한다.
-3. `npm run dev`
+2. 에셋을 바꿨다면 `npm run build:assets-manifests`로 manifest를 갱신한다.
+3. 개별 갱신도 가능하다.
+   - `npm run build:guests-manifest`
+   - `npm run build:food-manifest`
+   - `npm run build:work-manifest`
+4. `npm run dev`
 
 ## 빌드
-1. 게스트 에셋을 바꿨다면 먼저 `npm run build:guests-manifest`를 실행한다.
+1. 에셋 변경 시 먼저 `npm run build:assets-manifests`를 실행한다.
 2. `npm run build`
 3. 결과물은 `dist/`에 생성된다.
 4. `dist/index.html`과 `dist/share.html`이 함께 생성된다.

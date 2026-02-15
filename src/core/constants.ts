@@ -161,6 +161,10 @@ export const ASSET_PATH_YUUKA_BODY = "/assets/yuuka/yuuka_body.png";
 export const ASSET_PATH_YUUKA_THIGH = "/assets/yuuka/yuuka_thigh.png";
 export const ASSET_KEY_GUEST_MANIFEST = "guest_manifest";
 export const ASSET_PATH_GUEST_MANIFEST = "/assets/guests/manifest.json";
+export const ASSET_KEY_FOOD_MANIFEST = "food_manifest";
+export const ASSET_PATH_FOOD_MANIFEST = "/assets/food/manifest.json";
+export const ASSET_KEY_WORK_MANIFEST = "work_manifest";
+export const ASSET_PATH_WORK_MANIFEST = "/assets/work/manifest.json";
 
 export const YUUKA_BASE_SCALE = 0.5;
 export const YUUKA_LOWER_MAX_MULT_L10 = 1.68;
@@ -190,3 +194,14 @@ export const GUEST_TARGET_X_RATIO = 0.6;
 export const GUEST_BOB_AMPLITUDE_PX = 6;
 export const GUEST_ACTION_SHAKE_X_PX = 6;
 export const GUEST_ACTION_SHAKE_ROT_RAD = 0.05;
+
+export const ACTION_VFX_TARGET_HEIGHT_RATIO = 0.3;
+export const ACTION_VFX_NATIVE_HEIGHT_PX = 240;
+export const ACTION_VFX_MOVE_MS = 200;
+export const ACTION_VFX_FADE_MS = 100;
+export const ACTION_VFX_OFFSCREEN_MULT = 0.6;
+export const ACTION_VFX_OFFSCREEN_MARGIN_PX = 20;
+export const ACTION_VFX_SPAWN_Y_RATIO = 0.5;
+export const ACTION_VFX_TARGET_X_RATIO = 0.5;
+export const ACTION_VFX_TARGET_Y_RATIO = 0.5;
+export const ACTION_VFX_PLACEHOLDER_COLOR = 0xffdca8;

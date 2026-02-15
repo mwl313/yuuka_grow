@@ -1,11 +1,25 @@
 import Phaser from "phaser";
 import {
+  ACTION_VFX_FADE_MS,
+  ACTION_VFX_MOVE_MS,
+  ACTION_VFX_NATIVE_HEIGHT_PX,
+  ACTION_VFX_OFFSCREEN_MARGIN_PX,
+  ACTION_VFX_OFFSCREEN_MULT,
+  ACTION_VFX_PLACEHOLDER_COLOR,
+  ACTION_VFX_SPAWN_Y_RATIO,
+  ACTION_VFX_TARGET_HEIGHT_RATIO,
+  ACTION_VFX_TARGET_X_RATIO,
+  ACTION_VFX_TARGET_Y_RATIO,
   ASSET_KEY_BG_MAIN_OFFICE,
+  ASSET_KEY_FOOD_MANIFEST,
   ASSET_KEY_GUEST_MANIFEST,
   ASSET_KEY_YUUKA_BODY,
   ASSET_KEY_YUUKA_THIGH,
+  ASSET_KEY_WORK_MANIFEST,
   ASSET_PATH_BG_MAIN_OFFICE,
+  ASSET_PATH_FOOD_MANIFEST,
   ASSET_PATH_GUEST_MANIFEST,
+  ASSET_PATH_WORK_MANIFEST,
   ASSET_PATH_YUUKA_BODY,
   ASSET_PATH_YUUKA_THIGH,
   GUEST_ACTION_SHAKE_ROT_RAD,
@@ -41,6 +55,14 @@ import { getStage } from "../core/stage";
 import type { GameState } from "../core/types";
 import { GuestAudioPlayer } from "./guestAudio";
 import {
+  actionImageTextureKey,
+  actionSoundKey,
+  normalizeActionManifest,
+  resolveActionAssetUrl,
+  type ActionManifest,
+  type ActionVfxKind,
+} from "./actionManifest";
+import {
   guestAssetKeyFromLogNameKey,
   guestTextureKey,
   normalizeGuestManifest,
@@ -63,6 +85,11 @@ interface GuestCinematicRuntime {
   bobTween?: Phaser.Tweens.Tween;
   moveTween?: Phaser.Tweens.Tween;
   actionTween?: Phaser.Tweens.Tween;
+}
+
+interface ActionAssetPools {
+  imageKeys: string[];
+  soundKeys: string[];
 }
 
 interface GuestActorBundle {
@@ -89,12 +116,21 @@ class YuukaScene extends Phaser.Scene {
   private giantBaseScale11?: number;
 
   private bgSprite?: Phaser.GameObjects.Image;
+  private yuukaLayer?: Phaser.GameObjects.Container;
+  private vfxLayer?: Phaser.GameObjects.Container;
+  private guestLayer?: Phaser.GameObjects.Container;
   private upperSprite?: Phaser.GameObjects.Image;
   private lowerSprite?: Phaser.GameObjects.Image;
   private yuukaPlaceholder?: Phaser.GameObjects.Rectangle;
 
   private guestManifest: GuestManifest = {};
+  private foodManifest: ActionManifest = { images: [], sounds: [] };
+  private workManifest: ActionManifest = { images: [], sounds: [] };
+  private foodPools: ActionAssetPools = { imageKeys: [], soundKeys: [] };
+  private workPools: ActionAssetPools = { imageKeys: [], soundKeys: [] };
   private readonly guestAudio = new GuestAudioPlayer();
+  private currentEatSfx?: Phaser.Sound.BaseSound;
+  private currentWorkSfx?: Phaser.Sound.BaseSound;
   private activeGuest?: GuestCinematicRuntime;
 
   private debugEnabled = false;
@@ -105,12 +141,15 @@ class YuukaScene extends Phaser.Scene {
     this.load.image(ASSET_KEY_YUUKA_BODY, ASSET_PATH_YUUKA_BODY);
     this.load.image(ASSET_KEY_YUUKA_THIGH, ASSET_PATH_YUUKA_THIGH);
     this.load.json(ASSET_KEY_GUEST_MANIFEST, ASSET_PATH_GUEST_MANIFEST);
+    this.load.json(ASSET_KEY_FOOD_MANIFEST, ASSET_PATH_FOOD_MANIFEST);
+    this.load.json(ASSET_KEY_WORK_MANIFEST, ASSET_PATH_WORK_MANIFEST);
   }
 
   create(): void {
     this.cameras.main.setBackgroundColor(RENDER_BG_COLOR);
     this.loadGuestManifest();
-    this.queueGuestTexturesFromManifest();
+    this.loadActionManifests();
+    this.queueManifestAssets();
 
     if (this.textures.exists(ASSET_KEY_BG_MAIN_OFFICE)) {
       this.bgSprite = this.add.image(0, 0, ASSET_KEY_BG_MAIN_OFFICE);
@@ -119,17 +158,24 @@ class YuukaScene extends Phaser.Scene {
       this.syncBackgroundToPanel();
     }
 
+    this.yuukaLayer = this.add.container(0, 0);
+    this.yuukaLayer.setDepth(1);
+    this.vfxLayer = this.add.container(0, 0);
+    this.vfxLayer.setDepth(2);
+    this.guestLayer = this.add.container(0, 0);
+    this.guestLayer.setDepth(3);
+
     if (this.hasSplitTextures()) {
       const centerX = this.getCenterX();
       const footY = this.getFootY();
 
       this.lowerSprite = this.add.image(centerX, footY, ASSET_KEY_YUUKA_THIGH);
       this.lowerSprite.setOrigin(0.5, 1);
-      this.lowerSprite.setDepth(1);
+      this.yuukaLayer.add(this.lowerSprite);
 
       this.upperSprite = this.add.image(centerX, footY, ASSET_KEY_YUUKA_BODY);
       this.upperSprite.setOrigin(0.5, 0);
-      this.upperSprite.setDepth(2);
+      this.yuukaLayer.add(this.upperSprite);
     }
 
     this.yuukaPlaceholder = this.add.rectangle(
@@ -139,7 +185,7 @@ class YuukaScene extends Phaser.Scene {
       420,
       PLACEHOLDER_YUUKA_COLOR,
     );
-    this.yuukaPlaceholder.setDepth(1);
+    this.yuukaLayer.add(this.yuukaPlaceholder);
 
     this.debugGraphics = this.add.graphics();
     this.debugGraphics.setDepth(9);
@@ -151,6 +197,8 @@ class YuukaScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.destroyActiveGuest(true);
       this.guestAudio.destroy();
+      this.stopEatSfx();
+      this.stopWorkSfx();
       this.stopScaleTween();
       this.stopTransitionTweens();
     });
@@ -171,6 +219,16 @@ class YuukaScene extends Phaser.Scene {
       this.skipActiveGuestWithFade();
     }
     this.startGuestCinematic(guestKey);
+  }
+
+  playEatVfx(): void {
+    if (!this.sys.isActive()) return;
+    this.playActionVfx("food");
+  }
+
+  playWorkVfx(): void {
+    if (!this.sys.isActive()) return;
+    this.playActionVfx("work");
   }
 
   private redraw(): void {
@@ -477,7 +535,31 @@ class YuukaScene extends Phaser.Scene {
     this.guestManifest = normalizeGuestManifest(raw);
   }
 
-  private queueGuestTexturesFromManifest(): void {
+  private loadActionManifests(): void {
+    if (this.cache.json.exists(ASSET_KEY_FOOD_MANIFEST)) {
+      this.foodManifest = normalizeActionManifest(this.cache.json.get(ASSET_KEY_FOOD_MANIFEST));
+    } else {
+      this.foodManifest = { images: [], sounds: [] };
+    }
+
+    if (this.cache.json.exists(ASSET_KEY_WORK_MANIFEST)) {
+      this.workManifest = normalizeActionManifest(this.cache.json.get(ASSET_KEY_WORK_MANIFEST));
+    } else {
+      this.workManifest = { images: [], sounds: [] };
+    }
+  }
+
+  private queueManifestAssets(): void {
+    let hasQueued = false;
+    hasQueued = this.queueGuestTexturesFromManifest() || hasQueued;
+    hasQueued = this.queueActionAssetsFromManifest("food", this.foodManifest, this.foodPools) || hasQueued;
+    hasQueued = this.queueActionAssetsFromManifest("work", this.workManifest, this.workPools) || hasQueued;
+    if (hasQueued) {
+      this.load.start();
+    }
+  }
+
+  private queueGuestTexturesFromManifest(): boolean {
     let hasQueued = false;
     const entries = Object.entries(this.guestManifest) as [GuestAssetKey, GuestManifest[GuestAssetKey]][];
     for (const [guestKey, entry] of entries) {
@@ -487,9 +569,148 @@ class YuukaScene extends Phaser.Scene {
       this.load.image(textureKey, resolveGuestAssetUrl(entry.image));
       hasQueued = true;
     }
-    if (hasQueued) {
-      this.load.start();
+    return hasQueued;
+  }
+
+  private queueActionAssetsFromManifest(
+    kind: ActionVfxKind,
+    manifest: ActionManifest,
+    targetPools: ActionAssetPools,
+  ): boolean {
+    targetPools.imageKeys = manifest.images.map((imagePath) => actionImageTextureKey(kind, imagePath));
+    targetPools.soundKeys = manifest.sounds.map((soundPath) => actionSoundKey(kind, soundPath));
+
+    let hasQueued = false;
+    for (const imagePath of manifest.images) {
+      const textureKey = actionImageTextureKey(kind, imagePath);
+      if (this.textures.exists(textureKey)) continue;
+      this.load.image(textureKey, resolveActionAssetUrl(kind, imagePath));
+      hasQueued = true;
     }
+
+    for (const soundPath of manifest.sounds) {
+      const soundKey = actionSoundKey(kind, soundPath);
+      if (this.cache.audio.exists(soundKey)) continue;
+      this.load.audio(soundKey, resolveActionAssetUrl(kind, soundPath));
+      hasQueued = true;
+    }
+
+    return hasQueued;
+  }
+
+  private playActionVfx(kind: ActionVfxKind): void {
+    const pools = kind === "food" ? this.foodPools : this.workPools;
+    const scale = (RENDER_HEIGHT * ACTION_VFX_TARGET_HEIGHT_RATIO) / ACTION_VFX_NATIVE_HEIGHT_PX;
+    const sprite = this.createActionVfxSprite(pools, scale);
+    const spawnY = RENDER_HEIGHT * ACTION_VFX_SPAWN_Y_RATIO;
+    const targetX = RENDER_WIDTH * ACTION_VFX_TARGET_X_RATIO;
+    const targetY = RENDER_HEIGHT * ACTION_VFX_TARGET_Y_RATIO;
+    const spawnX =
+      kind === "food"
+        ? RENDER_WIDTH + sprite.displayWidth * ACTION_VFX_OFFSCREEN_MULT + ACTION_VFX_OFFSCREEN_MARGIN_PX
+        : -sprite.displayWidth * ACTION_VFX_OFFSCREEN_MULT - ACTION_VFX_OFFSCREEN_MARGIN_PX;
+
+    sprite.setPosition(spawnX, spawnY);
+
+    this.tweens.add({
+      targets: sprite,
+      x: targetX,
+      y: targetY,
+      duration: ACTION_VFX_MOVE_MS,
+      ease: Phaser.Math.Easing.Cubic.Out,
+      onComplete: () => {
+        this.tweens.add({
+          targets: sprite,
+          alpha: 0,
+          duration: ACTION_VFX_FADE_MS,
+          onComplete: () => sprite.destroy(),
+        });
+      },
+    });
+
+    this.playActionSfx(kind, pools);
+  }
+
+  private createActionVfxSprite(
+    pools: ActionAssetPools,
+    scale: number,
+  ): Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle {
+    const textureKey = this.pickRandomKey(
+      pools.imageKeys.filter((key) => this.textures.exists(key)),
+    );
+
+    if (textureKey) {
+      const image = this.add.image(0, 0, textureKey);
+      image.setScale(scale, scale);
+      this.vfxLayer?.add(image);
+      return image;
+    }
+
+    const placeholder = this.add.rectangle(0, 0, 304, 240, ACTION_VFX_PLACEHOLDER_COLOR, 0.95);
+    placeholder.setScale(scale, scale);
+    this.vfxLayer?.add(placeholder);
+    return placeholder;
+  }
+
+  private playActionSfx(kind: ActionVfxKind, pools: ActionAssetPools): void {
+    const soundKey = this.pickRandomKey(pools.soundKeys.filter((key) => this.cache.audio.exists(key)));
+    if (!soundKey) return;
+
+    if (kind === "food") {
+      this.stopEatSfx();
+    } else {
+      this.stopWorkSfx();
+    }
+
+    const sound = this.sound.add(soundKey);
+    const clearCurrent = () => {
+      if (kind === "food") {
+        if (this.currentEatSfx === sound) {
+          this.currentEatSfx = undefined;
+        }
+      } else if (this.currentWorkSfx === sound) {
+        this.currentWorkSfx = undefined;
+      }
+      sound.destroy();
+    };
+
+    sound.once("complete", clearCurrent);
+    sound.once("destroy", () => {
+      if (kind === "food") {
+        if (this.currentEatSfx === sound) {
+          this.currentEatSfx = undefined;
+        }
+      } else if (this.currentWorkSfx === sound) {
+        this.currentWorkSfx = undefined;
+      }
+    });
+
+    sound.play();
+    if (kind === "food") {
+      this.currentEatSfx = sound;
+    } else {
+      this.currentWorkSfx = sound;
+    }
+  }
+
+  private pickRandomKey(keys: string[]): string | undefined {
+    if (keys.length === 0) return undefined;
+    const index = Math.floor(Math.random() * keys.length);
+    return keys[index];
+  }
+
+  private stopEatSfx(): void {
+    if (!this.currentEatSfx) return;
+    this.currentEatSfx.stop();
+    this.currentEatSfx.destroy();
+    this.currentEatSfx = undefined;
+  }
+
+  private stopWorkSfx(): void {
+    if (!this.currentWorkSfx) return;
+    this.currentWorkSfx.stop();
+    this.currentWorkSfx.destroy();
+    this.currentWorkSfx = undefined;
   }
 
   private startGuestCinematic(guestKey: GuestAssetKey): void {
@@ -632,9 +853,9 @@ class YuukaScene extends Phaser.Scene {
     footY: number,
   ): GuestActorBundle {
     const actor = this.add.container(0, footY);
-    actor.setDepth(4);
     actor.setAlpha(1);
     actor.setScale(baseScale, baseScale);
+    this.guestLayer?.add(actor);
 
     const textureKey = guestTextureKey(guestKey);
     if (this.textures.exists(textureKey)) {
@@ -698,43 +919,47 @@ export class YuukaRenderer {
       stage: getStage(state.thighCm),
       thighCm: state.thighCm,
     });
-    this.handleGuestTrigger(state);
+    this.handleActionTriggers(state);
   }
 
   destroy(): void {
     this.game.destroy(true);
   }
 
-  private handleGuestTrigger(state: GameState): void {
+  private handleActionTriggers(state: GameState): void {
     if (!this.initializedLogCursor) {
       this.initializedLogCursor = true;
       this.processedLogCount = state.logs.length;
       return;
     }
 
-    const guestKey = this.consumeLatestGuestFromNewLogs(state);
-    if (guestKey) {
-      this.scene.playGuestCinematic(guestKey);
-    }
-  }
-
-  private consumeLatestGuestFromNewLogs(state: GameState): GuestAssetKey | null {
     if (state.logs.length < this.processedLogCount) {
       this.processedLogCount = 0;
     }
 
-    let latestGuestKey: GuestAssetKey | null = null;
     for (let i = this.processedLogCount; i < state.logs.length; i += 1) {
       const payload = decodeLog(state.logs[i]);
-      if (!payload || payload.key !== "log.guest") continue;
-      const nameKeyValue = payload.params?.nameKey;
-      if (typeof nameKeyValue !== "string") continue;
-      const guestKey = guestAssetKeyFromLogNameKey(nameKeyValue);
-      if (!guestKey) continue;
-      latestGuestKey = guestKey;
+      if (!payload) continue;
+
+      if (payload.key === "log.eat") {
+        this.scene.playEatVfx();
+        continue;
+      }
+
+      if (payload.key === "log.work" || payload.key === "log.workNoa") {
+        this.scene.playWorkVfx();
+        continue;
+      }
+
+      if (payload.key === "log.guest") {
+        const nameKeyValue = payload.params?.nameKey;
+        if (typeof nameKeyValue !== "string") continue;
+        const guestKey = guestAssetKeyFromLogNameKey(nameKeyValue);
+        if (!guestKey) continue;
+        this.scene.playGuestCinematic(guestKey);
+      }
     }
 
     this.processedLogCount = state.logs.length;
-    return latestGuestKey;
   }
 }

@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build:guests-manifest": "node scripts/buildGuestsManifest.mjs",
+    "build:food-manifest": "node scripts/buildActionManifest.mjs food",
+    "build:work-manifest": "node scripts/buildActionManifest.mjs work",
+    "build:assets-manifests": "npm run build:guests-manifest && npm run build:food-manifest && npm run build:work-manifest",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

@@ -1,0 +1,12 @@
+{
+  "images": [
+    "image/work1.webp",
+    "image/work2.webp",
+    "image/work3.webp",
+    "image/work4.webp"
+  ],
+  "sounds": [
+    "sound/work1.wav",
+    "sound/work2.wav"
+  ]
+}
