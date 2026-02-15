@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build:guests-manifest": "node scripts/buildGuestsManifest.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

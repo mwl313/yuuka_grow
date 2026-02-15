@@ -1,0 +1,57 @@
+{
+  "aris": {
+    "image": "aris/aris.png",
+    "voices": [
+      "aris/voices/aris1.mp3",
+      "aris/voices/aris2.mp3",
+      "aris/voices/aris3.mp3"
+    ]
+  },
+  "koyuki": {
+    "image": "koyuki/koyuki.png",
+    "voices": [
+      "koyuki/voices/koyuki1.mp3",
+      "koyuki/voices/koyuki2.mp3",
+      "koyuki/voices/koyuki3.mp3",
+      "koyuki/voices/koyuki4.mp3"
+    ]
+  },
+  "maki": {
+    "image": "maki/maki.png",
+    "voices": [
+      "maki/voices/maki1.mp3",
+      "maki/voices/maki2.mp3",
+      "maki/voices/maki3.mp3"
+    ]
+  },
+  "momoi": {
+    "image": "momoi/momoi.png",
+    "voices": [
+      "momoi/voices/momoi1.mp3",
+      "momoi/voices/momoi2.mp3",
+      "momoi/voices/momoi3.mp3",
+      "momoi/voices/momoi4.mp3"
+    ]
+  },
+  "noa": {
+    "image": "noa/noa.png",
+    "voices": [
+      "noa/voices/noa1.mp3",
+      "noa/voices/noa2.mp3",
+      "noa/voices/noa3.mp3",
+      "noa/voices/noa4.mp3"
+    ]
+  },
+  "rio": {
+    "image": "rio/rio.png",
+    "voices": [
+      "rio/voices/rio1.mp3",
+      "rio/voices/rio2.mp3",
+      "rio/voices/rio3.mp3"
+    ]
+  },
+  "sensei": {
+    "image": "sensei/sensei.png",
+    "voices": []
+  }
+}

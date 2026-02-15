@@ -5,12 +5,14 @@
 
 ## 로컬 실행
 1. `npm install`
-2. `npm run dev`
+2. 게스트 에셋을 바꿨다면 `npm run build:guests-manifest`로 `public/assets/guests/manifest.json`을 갱신한다.
+3. `npm run dev`
 
 ## 빌드
-1. `npm run build`
-2. 결과물은 `dist/`에 생성된다.
-3. `dist/index.html`과 `dist/share.html`이 함께 생성된다.
+1. 게스트 에셋을 바꿨다면 먼저 `npm run build:guests-manifest`를 실행한다.
+2. `npm run build`
+3. 결과물은 `dist/`에 생성된다.
+4. `dist/index.html`과 `dist/share.html`이 함께 생성된다.
 
 ## 정적 호스팅 배포
 1. `npm run build`로 `dist/`를 만든다.

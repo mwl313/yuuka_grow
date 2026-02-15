@@ -159,6 +159,8 @@ export const ASSET_KEY_YUUKA_BODY = "yuuka_body";
 export const ASSET_KEY_YUUKA_THIGH = "yuuka_thigh";
 export const ASSET_PATH_YUUKA_BODY = "/assets/yuuka/yuuka_body.png";
 export const ASSET_PATH_YUUKA_THIGH = "/assets/yuuka/yuuka_thigh.png";
+export const ASSET_KEY_GUEST_MANIFEST = "guest_manifest";
+export const ASSET_PATH_GUEST_MANIFEST = "/assets/guests/manifest.json";
 
 export const YUUKA_BASE_SCALE = 0.5;
 export const YUUKA_LOWER_MAX_MULT_L10 = 1.68;
@@ -173,3 +175,18 @@ export const YUUKA_LEVEL_GROWTH_ANIM_MS = 500;
 export const YUUKA_TRANSITION_SHAKE_MAX_PX = 14;
 
 export const THEME_SLICE_FALLBACK = 12;
+
+export const GUEST_CINEMATIC_ENTER_MS = 550;
+export const GUEST_CINEMATIC_ACTION_MS = 400;
+export const GUEST_CINEMATIC_EXIT_MS = 550;
+export const GUEST_CINEMATIC_SKIP_FADE_MS = 150;
+export const GUEST_VOICE_START_DELAY_MS = 0;
+export const GUEST_VOICE_FADEOUT_MS = 300;
+export const GUEST_TARGET_HEIGHT_RATIO = 0.35;
+export const GUEST_BASE_TEXTURE_SIZE = 500;
+export const GUEST_ENTER_OFFSCREEN_MULT = 0.6;
+export const GUEST_ENTER_OFFSCREEN_MARGIN_PX = 20;
+export const GUEST_TARGET_X_RATIO = 0.6;
+export const GUEST_BOB_AMPLITUDE_PX = 6;
+export const GUEST_ACTION_SHAKE_X_PX = 6;
+export const GUEST_ACTION_SHAKE_ROT_RAD = 0.05;

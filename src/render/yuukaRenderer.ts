@@ -1,11 +1,25 @@
 import Phaser from "phaser";
 import {
   ASSET_KEY_BG_MAIN_OFFICE,
+  ASSET_KEY_GUEST_MANIFEST,
   ASSET_KEY_YUUKA_BODY,
   ASSET_KEY_YUUKA_THIGH,
   ASSET_PATH_BG_MAIN_OFFICE,
+  ASSET_PATH_GUEST_MANIFEST,
   ASSET_PATH_YUUKA_BODY,
   ASSET_PATH_YUUKA_THIGH,
+  GUEST_ACTION_SHAKE_ROT_RAD,
+  GUEST_ACTION_SHAKE_X_PX,
+  GUEST_BASE_TEXTURE_SIZE,
+  GUEST_BOB_AMPLITUDE_PX,
+  GUEST_CINEMATIC_ACTION_MS,
+  GUEST_CINEMATIC_ENTER_MS,
+  GUEST_CINEMATIC_EXIT_MS,
+  GUEST_CINEMATIC_SKIP_FADE_MS,
+  GUEST_ENTER_OFFSCREEN_MARGIN_PX,
+  GUEST_ENTER_OFFSCREEN_MULT,
+  GUEST_TARGET_HEIGHT_RATIO,
+  GUEST_TARGET_X_RATIO,
   PLACEHOLDER_YUUKA_COLOR,
   RENDER_BG_COLOR,
   RENDER_HEIGHT,
@@ -18,16 +32,43 @@ import {
   YUUKA_LEVEL_GROWTH_ANIM_MS,
   YUUKA_LOWER_MAX_MULT_L10,
   YUUKA_SEAM_OVERLAP_PX,
-  YUUKA_TRANSITION_SHAKE_MAX_PX,
   YUUKA_TRANSITION_DURATION_MS,
+  YUUKA_TRANSITION_SHAKE_MAX_PX,
   YUUKA_UPPER_JOINT_FROM_TOP_PX,
 } from "../core/constants";
+import { decodeLog } from "../core/logger";
 import { getStage } from "../core/stage";
 import type { GameState } from "../core/types";
+import { GuestAudioPlayer } from "./guestAudio";
+import {
+  guestAssetKeyFromLogNameKey,
+  guestTextureKey,
+  normalizeGuestManifest,
+  resolveGuestAssetUrl,
+  type GuestAssetKey,
+  type GuestManifest,
+} from "./guestManifest";
 
 interface RenderSnapshot {
   stage: number;
   thighCm: number;
+}
+
+interface GuestCinematicRuntime {
+  actor: Phaser.GameObjects.Container;
+  sprite?: Phaser.GameObjects.Image;
+  footY: number;
+  startX: number;
+  targetX: number;
+  bobTween?: Phaser.Tweens.Tween;
+  moveTween?: Phaser.Tweens.Tween;
+  actionTween?: Phaser.Tweens.Tween;
+}
+
+interface GuestActorBundle {
+  actor: Phaser.GameObjects.Container;
+  sprite?: Phaser.GameObjects.Image;
+  displayWidth: number;
 }
 
 type RenderMode = "normal" | "transition" | "giant";
@@ -52,6 +93,10 @@ class YuukaScene extends Phaser.Scene {
   private lowerSprite?: Phaser.GameObjects.Image;
   private yuukaPlaceholder?: Phaser.GameObjects.Rectangle;
 
+  private guestManifest: GuestManifest = {};
+  private readonly guestAudio = new GuestAudioPlayer();
+  private activeGuest?: GuestCinematicRuntime;
+
   private debugEnabled = false;
   private debugGraphics?: Phaser.GameObjects.Graphics;
 
@@ -59,10 +104,13 @@ class YuukaScene extends Phaser.Scene {
     this.load.image(ASSET_KEY_BG_MAIN_OFFICE, ASSET_PATH_BG_MAIN_OFFICE);
     this.load.image(ASSET_KEY_YUUKA_BODY, ASSET_PATH_YUUKA_BODY);
     this.load.image(ASSET_KEY_YUUKA_THIGH, ASSET_PATH_YUUKA_THIGH);
+    this.load.json(ASSET_KEY_GUEST_MANIFEST, ASSET_PATH_GUEST_MANIFEST);
   }
 
   create(): void {
     this.cameras.main.setBackgroundColor(RENDER_BG_COLOR);
+    this.loadGuestManifest();
+    this.queueGuestTexturesFromManifest();
 
     if (this.textures.exists(ASSET_KEY_BG_MAIN_OFFICE)) {
       this.bgSprite = this.add.image(0, 0, ASSET_KEY_BG_MAIN_OFFICE);
@@ -100,6 +148,13 @@ class YuukaScene extends Phaser.Scene {
       this.updateDebugOverlay();
     });
 
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.destroyActiveGuest(true);
+      this.guestAudio.destroy();
+      this.stopScaleTween();
+      this.stopTransitionTweens();
+    });
+
     this.redraw();
   }
 
@@ -108,6 +163,14 @@ class YuukaScene extends Phaser.Scene {
     if (this.sys.isActive()) {
       this.redraw();
     }
+  }
+
+  playGuestCinematic(guestKey: GuestAssetKey): void {
+    if (!this.sys.isActive()) return;
+    if (this.activeGuest) {
+      this.skipActiveGuestWithFade();
+    }
+    this.startGuestCinematic(guestKey);
   }
 
   private redraw(): void {
@@ -404,11 +467,215 @@ class YuukaScene extends Phaser.Scene {
     this.bgSprite.setScale(scale);
     this.bgSprite.setPosition(RENDER_WIDTH / 2, RENDER_HEIGHT / 2);
   }
+
+  private loadGuestManifest(): void {
+    if (!this.cache.json.exists(ASSET_KEY_GUEST_MANIFEST)) {
+      this.guestManifest = {};
+      return;
+    }
+    const raw = this.cache.json.get(ASSET_KEY_GUEST_MANIFEST);
+    this.guestManifest = normalizeGuestManifest(raw);
+  }
+
+  private queueGuestTexturesFromManifest(): void {
+    let hasQueued = false;
+    const entries = Object.entries(this.guestManifest) as [GuestAssetKey, GuestManifest[GuestAssetKey]][];
+    for (const [guestKey, entry] of entries) {
+      if (!entry?.image) continue;
+      const textureKey = guestTextureKey(guestKey);
+      if (this.textures.exists(textureKey)) continue;
+      this.load.image(textureKey, resolveGuestAssetUrl(entry.image));
+      hasQueued = true;
+    }
+    if (hasQueued) {
+      this.load.start();
+    }
+  }
+
+  private startGuestCinematic(guestKey: GuestAssetKey): void {
+    const footY = this.getFootY();
+    const baseScale = (RENDER_HEIGHT * GUEST_TARGET_HEIGHT_RATIO) / GUEST_BASE_TEXTURE_SIZE;
+    const targetX = RENDER_WIDTH * GUEST_TARGET_X_RATIO;
+    const actorBundle = this.createGuestActor(guestKey, baseScale, footY);
+    const startX =
+      RENDER_WIDTH + actorBundle.displayWidth * GUEST_ENTER_OFFSCREEN_MULT + GUEST_ENTER_OFFSCREEN_MARGIN_PX;
+    actorBundle.actor.setPosition(startX, footY);
+    actorBundle.sprite?.setFlipX(false);
+    const runtime: GuestCinematicRuntime = {
+      actor: actorBundle.actor,
+      sprite: actorBundle.sprite,
+      footY,
+      startX,
+      targetX,
+    };
+    this.activeGuest = runtime;
+
+    const voiceUrls = this.getGuestVoiceUrls(guestKey);
+    this.guestAudio.playRandom(voiceUrls);
+
+    runtime.bobTween = this.startGuestBob(runtime);
+    runtime.moveTween = this.tweens.add({
+      targets: runtime.actor,
+      x: targetX,
+      duration: GUEST_CINEMATIC_ENTER_MS,
+      ease: Phaser.Math.Easing.Cubic.Out,
+      onComplete: () => {
+        if (this.activeGuest !== runtime) return;
+        runtime.moveTween = undefined;
+        this.stopGuestBob(runtime);
+        this.startGuestAction(runtime);
+      },
+    });
+  }
+
+  private startGuestAction(runtime: GuestCinematicRuntime): void {
+    runtime.actionTween = this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: GUEST_CINEMATIC_ACTION_MS,
+      onUpdate: () => {
+        runtime.actor.x = runtime.targetX + Phaser.Math.FloatBetween(-GUEST_ACTION_SHAKE_X_PX, GUEST_ACTION_SHAKE_X_PX);
+        runtime.actor.rotation = Phaser.Math.FloatBetween(
+          -GUEST_ACTION_SHAKE_ROT_RAD,
+          GUEST_ACTION_SHAKE_ROT_RAD,
+        );
+      },
+      onComplete: () => {
+        if (this.activeGuest !== runtime) return;
+        runtime.actionTween = undefined;
+        runtime.actor.x = runtime.targetX;
+        runtime.actor.rotation = 0;
+        this.startGuestExit(runtime);
+      },
+    });
+  }
+
+  private startGuestExit(runtime: GuestCinematicRuntime): void {
+    runtime.sprite?.setFlipX(true);
+    runtime.bobTween = this.startGuestBob(runtime);
+    runtime.moveTween = this.tweens.add({
+      targets: runtime.actor,
+      x: runtime.startX,
+      duration: GUEST_CINEMATIC_EXIT_MS,
+      ease: Phaser.Math.Easing.Cubic.In,
+      onComplete: () => {
+        if (this.activeGuest !== runtime) return;
+        runtime.moveTween = undefined;
+        this.stopGuestRuntime(runtime);
+        runtime.actor.destroy();
+        this.activeGuest = undefined;
+      },
+    });
+  }
+
+  private skipActiveGuestWithFade(): void {
+    if (!this.activeGuest) return;
+    const runtime = this.activeGuest;
+    this.stopGuestRuntime(runtime);
+    this.activeGuest = undefined;
+    this.guestAudio.stopImmediate();
+
+    this.tweens.add({
+      targets: runtime.actor,
+      alpha: 0,
+      duration: GUEST_CINEMATIC_SKIP_FADE_MS,
+      onComplete: () => runtime.actor.destroy(),
+    });
+  }
+
+  private destroyActiveGuest(immediate: boolean): void {
+    if (!this.activeGuest) return;
+    const runtime = this.activeGuest;
+    this.stopGuestRuntime(runtime);
+    this.activeGuest = undefined;
+    if (immediate) {
+      runtime.actor.destroy();
+      this.guestAudio.stopImmediate();
+      return;
+    }
+    this.skipActiveGuestWithFade();
+  }
+
+  private stopGuestRuntime(runtime: GuestCinematicRuntime): void {
+    runtime.moveTween?.stop();
+    runtime.moveTween = undefined;
+    runtime.actionTween?.stop();
+    runtime.actionTween = undefined;
+    this.stopGuestBob(runtime);
+    runtime.actor.rotation = 0;
+  }
+
+  private startGuestBob(runtime: GuestCinematicRuntime): Phaser.Tweens.Tween {
+    runtime.actor.y = runtime.footY;
+    return this.tweens.addCounter({
+      from: -GUEST_BOB_AMPLITUDE_PX,
+      to: GUEST_BOB_AMPLITUDE_PX,
+      duration: 90,
+      yoyo: true,
+      repeat: -1,
+      ease: Phaser.Math.Easing.Sine.InOut,
+      onUpdate: (tween) => {
+        runtime.actor.y = runtime.footY + (tween.getValue() ?? 0);
+      },
+    });
+  }
+
+  private stopGuestBob(runtime: GuestCinematicRuntime): void {
+    runtime.bobTween?.stop();
+    runtime.bobTween = undefined;
+    runtime.actor.y = runtime.footY;
+  }
+
+  private createGuestActor(
+    guestKey: GuestAssetKey,
+    baseScale: number,
+    footY: number,
+  ): GuestActorBundle {
+    const actor = this.add.container(0, footY);
+    actor.setDepth(4);
+    actor.setAlpha(1);
+    actor.setScale(baseScale, baseScale);
+
+    const textureKey = guestTextureKey(guestKey);
+    if (this.textures.exists(textureKey)) {
+      const image = this.add.image(0, 0, textureKey);
+      image.setOrigin(0.5, 1);
+      image.setFlipX(false);
+      actor.add(image);
+      return {
+        actor,
+        sprite: image,
+        displayWidth: image.displayWidth * Math.abs(baseScale),
+      };
+    }
+
+    const placeholder = this.add.rectangle(0, 0, GUEST_BASE_TEXTURE_SIZE, GUEST_BASE_TEXTURE_SIZE, 0x141923, 0.9);
+    placeholder.setOrigin(0.5, 1);
+    const label = this.add.text(0, -GUEST_BASE_TEXTURE_SIZE * 0.45, guestKey.toUpperCase(), {
+      color: "#f3f6ff",
+      fontSize: "40px",
+      fontFamily: "sans-serif",
+    });
+    label.setOrigin(0.5);
+
+    actor.add([placeholder, label]);
+    return {
+      actor,
+      displayWidth: GUEST_BASE_TEXTURE_SIZE * Math.abs(baseScale),
+    };
+  }
+
+  private getGuestVoiceUrls(guestKey: GuestAssetKey): string[] {
+    const voices = this.guestManifest[guestKey]?.voices ?? [];
+    return voices.map((voicePath) => resolveGuestAssetUrl(voicePath));
+  }
 }
 
 export class YuukaRenderer {
   private readonly scene: YuukaScene;
   private readonly game: Phaser.Game;
+  private initializedLogCursor = false;
+  private processedLogCount = 0;
 
   constructor(parentId: string) {
     this.scene = new YuukaScene("yuuka-scene");
@@ -431,9 +698,43 @@ export class YuukaRenderer {
       stage: getStage(state.thighCm),
       thighCm: state.thighCm,
     });
+    this.handleGuestTrigger(state);
   }
 
   destroy(): void {
     this.game.destroy(true);
+  }
+
+  private handleGuestTrigger(state: GameState): void {
+    if (!this.initializedLogCursor) {
+      this.initializedLogCursor = true;
+      this.processedLogCount = state.logs.length;
+      return;
+    }
+
+    const guestKey = this.consumeLatestGuestFromNewLogs(state);
+    if (guestKey) {
+      this.scene.playGuestCinematic(guestKey);
+    }
+  }
+
+  private consumeLatestGuestFromNewLogs(state: GameState): GuestAssetKey | null {
+    if (state.logs.length < this.processedLogCount) {
+      this.processedLogCount = 0;
+    }
+
+    let latestGuestKey: GuestAssetKey | null = null;
+    for (let i = this.processedLogCount; i < state.logs.length; i += 1) {
+      const payload = decodeLog(state.logs[i]);
+      if (!payload || payload.key !== "log.guest") continue;
+      const nameKeyValue = payload.params?.nameKey;
+      if (typeof nameKeyValue !== "string") continue;
+      const guestKey = guestAssetKeyFromLogNameKey(nameKeyValue);
+      if (!guestKey) continue;
+      latestGuestKey = guestKey;
+    }
+
+    this.processedLogCount = state.logs.length;
+    return latestGuestKey;
   }
 }
