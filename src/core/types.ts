@@ -9,7 +9,6 @@ export type GuestId =
   | "koyuki";
 export type GuestOutcomeId = "default" | "success" | "slip" | "jackpot" | "loss";
 export type StressBandId = "stable" | "neutral" | "risky" | "gambling";
-export type ComparisonKind = "chair" | "desk" | "person" | "car" | "building";
 export type LanguageCode = "ko" | "en" | "ja";
 
 export interface GameState {

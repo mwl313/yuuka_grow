@@ -35,13 +35,6 @@ export const STAGE_THRESHOLDS = [
 ];
 export const STAGE_GROWTH_FACTOR_AFTER_MAX = 1.32;
 
-export const GIANT_MODE_STAGE = 11;
-export const COMPARISON_STAGE_CHAIR = 11;
-export const COMPARISON_STAGE_DESK = 12;
-export const COMPARISON_STAGE_PERSON = 13;
-export const COMPARISON_STAGE_CAR = 14;
-export const COMPARISON_STAGE_BUILDING = 15;
-
 export const STRESS_BAND_STABLE_MAX = 29;
 export const STRESS_BAND_NEUTRAL_MAX = 59;
 export const STRESS_BAND_RISKY_MAX = 79;
@@ -155,16 +148,10 @@ export const RENDER_WIDTH = 900;
 export const RENDER_HEIGHT = 560;
 export const RENDER_BG_COLOR = "#0b1628";
 export const PLACEHOLDER_YUUKA_COLOR = 0xa8c6ff;
-export const PLACEHOLDER_COMPARE_COLOR = 0xf8de8c;
 export const PLACEHOLDER_TEXT_COLOR = "#10203a";
 
 export const ASSET_KEY_YUUKA = "yuuka";
 export const ASSET_KEY_BG_MAIN_OFFICE = "bg_main_office";
-export const ASSET_KEY_CHAIR = "chair";
-export const ASSET_KEY_DESK = "desk";
-export const ASSET_KEY_PERSON = "person";
-export const ASSET_KEY_CAR = "car";
-export const ASSET_KEY_BUILDING = "building";
 
 export const ASSET_PATH_YUUKA = "/assets/yuuka.png";
 export const ASSET_PATH_BG_MAIN_OFFICE = "/assets/background/BG_MainOffice.png";
@@ -172,11 +159,6 @@ export const ASSET_KEY_YUUKA_BODY = "yuuka_body";
 export const ASSET_KEY_YUUKA_THIGH = "yuuka_thigh";
 export const ASSET_PATH_YUUKA_BODY = "/assets/yuuka/yuuka_body.png";
 export const ASSET_PATH_YUUKA_THIGH = "/assets/yuuka/yuuka_thigh.png";
-export const ASSET_PATH_CHAIR = "/assets/chair.png";
-export const ASSET_PATH_DESK = "/assets/desk.png";
-export const ASSET_PATH_PERSON = "/assets/person.png";
-export const ASSET_PATH_CAR = "/assets/car.png";
-export const ASSET_PATH_BUILDING = "/assets/building.png";
 
 export const YUUKA_BASE_SCALE = 0.5;
 export const YUUKA_LOWER_MAX_MULT_L10 = 1.68;

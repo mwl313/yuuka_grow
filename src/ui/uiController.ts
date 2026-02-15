@@ -3,7 +3,7 @@ import { APP_VERSION, AUTHOR_NAME, IP_LABEL, VOLUME_STEP } from "../core/constan
 import { checkImmediateBankrupt } from "../core/endings";
 import { decodeLog } from "../core/logger";
 import { defaultRng } from "../core/rng";
-import { getComparisonKind, getStage } from "../core/stage";
+import { getStage } from "../core/stage";
 import { createInitialState } from "../core/state";
 import type { GameState, LanguageCode, RunResult, SaveData, Settings, StepResult } from "../core/types";
 import { formatNumber, getLanguage, onLanguageChange, setLanguage, t } from "../i18n";
@@ -37,7 +37,6 @@ interface UiRefs {
   hudStress: HTMLElement;
   hudThigh: HTMLElement;
   hudStage: HTMLElement;
-  hudCompare: HTMLElement;
   hudActions: HTMLElement;
   logs: HTMLUListElement;
   endingTitle: HTMLElement;
@@ -125,7 +124,6 @@ export class UiController {
             <span id="hud-stress"></span>
             <span id="hud-thigh"></span>
             <span id="hud-stage" class="hud-accent"></span>
-            <span id="hud-compare" class="hud-accent"></span>
             <span id="hud-actions"></span>
           </div>
 
@@ -230,7 +228,6 @@ export class UiController {
       hudStress: pick("hud-stress"),
       hudThigh: pick("hud-thigh"),
       hudStage: pick("hud-stage"),
-      hudCompare: pick("hud-compare"),
       hudActions: pick("hud-actions"),
       logs: pick("log-list"),
       endingTitle: pick("ending-title"),
@@ -428,16 +425,12 @@ export class UiController {
 
   private renderGameUi(): void {
     const stage = getStage(this.state.thighCm);
-    const comparison = getComparisonKind(stage);
 
     this.refs.hudDay.textContent = t("hud.day", { day: this.state.day });
     this.refs.hudCredits.textContent = t("hud.credits", { credits: formatNumber(this.state.money) });
     this.refs.hudStress.textContent = t("hud.stress", { stress: this.state.stress });
     this.refs.hudThigh.textContent = t("hud.thighCm", { thigh: Math.round(this.state.thighCm) });
     this.refs.hudStage.textContent = t("hud.stage", { stage });
-    this.refs.hudCompare.textContent = comparison
-      ? t("hud.compare", { target: t(`render.compare.${comparison}`) })
-      : t("hud.compareNone");
     this.refs.hudActions.textContent = t("hud.actions", {
       actions: this.state.actionsRemaining,
     });

@@ -36,8 +36,6 @@ const en: Record<string, string> = {
   "hud.thigh": "Thigh Circumference {thigh}cm",
   "hud.thighCm": "Thigh Circumference {thigh}cm",
   "hud.stage": "Stage {stage}",
-  "hud.compare": "Comparison {target}",
-  "hud.compareNone": "No comparison",
   "hud.actions": "Actions Left {actions}/3",
 
   // In-game action buttons (bottom panel)
@@ -119,11 +117,6 @@ const en: Record<string, string> = {
   "render.labelYuuka": "Yuuka (temp)",
   "render.stage": "Stage {stage}",
   "render.thigh": "Thigh {thigh}cm",
-  "render.compare.chair": "Chair",
-  "render.compare.desk": "Desk",
-  "render.compare.person": "Person",
-  "render.compare.car": "Car",
-  "render.compare.building": "Building",
 
   // Debug / fallback message
   "errors.missingKey": "[[missing:{key}]]",

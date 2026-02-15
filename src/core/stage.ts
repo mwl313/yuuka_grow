@@ -1,14 +1,7 @@
 import {
-  COMPARISON_STAGE_BUILDING,
-  COMPARISON_STAGE_CAR,
-  COMPARISON_STAGE_CHAIR,
-  COMPARISON_STAGE_DESK,
-  COMPARISON_STAGE_PERSON,
-  GIANT_MODE_STAGE,
   STAGE_GROWTH_FACTOR_AFTER_MAX,
   STAGE_THRESHOLDS,
 } from "./constants";
-import type { ComparisonKind } from "./types";
 
 export function getStage(thighCm: number): number {
   const maxStage = STAGE_THRESHOLDS.length;
@@ -52,13 +45,3 @@ function runStageSanityChecksInDev(): void {
 }
 
 runStageSanityChecksInDev();
-
-export function getComparisonKind(stage: number): ComparisonKind | null {
-  if (stage < GIANT_MODE_STAGE) return null;
-  if (stage >= COMPARISON_STAGE_BUILDING) return "building";
-  if (stage >= COMPARISON_STAGE_CAR) return "car";
-  if (stage >= COMPARISON_STAGE_PERSON) return "person";
-  if (stage >= COMPARISON_STAGE_DESK) return "desk";
-  if (stage >= COMPARISON_STAGE_CHAIR) return "chair";
-  return null;
-}

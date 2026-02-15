@@ -36,8 +36,6 @@ const ko: Record<string, string> = {
   "hud.thigh": "허벅지 둘레 {thigh}cm",
   "hud.thighCm": "허벅지 둘레 {thigh}cm",
   "hud.stage": "스테이지 {stage}",
-  "hud.compare": "비교 대상 {target}",
-  "hud.compareNone": "비교 대상 없음",
   "hud.actions": "남은 행동 {actions}/3",
 
   // In-game action buttons (bottom panel)
@@ -119,11 +117,6 @@ const ko: Record<string, string> = {
   "render.labelYuuka": "유우카",
   "render.stage": "스테이지 {stage}",
   "render.thigh": "허벅지 {thigh}cm",
-  "render.compare.chair": "의자",
-  "render.compare.desk": "책상",
-  "render.compare.person": "사람",
-  "render.compare.car": "자동차",
-  "render.compare.building": "건물",
 
   // Debug / fallback message
   "errors.missingKey": "[[missing:{key}]]",

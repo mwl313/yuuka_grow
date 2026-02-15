@@ -36,8 +36,6 @@ const ja: Record<string, string> = {
   "hud.thigh": "太もも周囲 {thigh}cm",
   "hud.thighCm": "太もも周囲 {thigh}cm",
   "hud.stage": "ステージ {stage}",
-  "hud.compare": "比較対象 {target}",
-  "hud.compareNone": "比較対象なし",
   "hud.actions": "残り行動 {actions}/3",
 
   // In-game action buttons (bottom panel)
@@ -119,11 +117,6 @@ const ja: Record<string, string> = {
   "render.labelYuuka": "ユウカ(temp)",
   "render.stage": "ステージ {stage}",
   "render.thigh": "太もも {thigh}cm",
-  "render.compare.chair": "イス",
-  "render.compare.desk": "机",
-  "render.compare.person": "人",
-  "render.compare.car": "車",
-  "render.compare.building": "建物",
 
   // Debug / fallback message
   "errors.missingKey": "[[missing:{key}]]",

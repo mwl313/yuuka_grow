@@ -1,17 +1,11 @@
 import Phaser from "phaser";
 import {
   ASSET_KEY_BG_MAIN_OFFICE,
-  ASSET_KEY_BUILDING,
-  ASSET_KEY_CAR,
-  ASSET_KEY_CHAIR,
-  ASSET_KEY_DESK,
-  ASSET_KEY_PERSON,
   ASSET_KEY_YUUKA_BODY,
   ASSET_KEY_YUUKA_THIGH,
   ASSET_PATH_BG_MAIN_OFFICE,
   ASSET_PATH_YUUKA_BODY,
   ASSET_PATH_YUUKA_THIGH,
-  PLACEHOLDER_COMPARE_COLOR,
   PLACEHOLDER_YUUKA_COLOR,
   RENDER_BG_COLOR,
   RENDER_HEIGHT,
@@ -28,8 +22,8 @@ import {
   YUUKA_TRANSITION_DURATION_MS,
   YUUKA_UPPER_JOINT_FROM_TOP_PX,
 } from "../core/constants";
-import { getComparisonKind, getStage } from "../core/stage";
-import type { ComparisonKind, GameState } from "../core/types";
+import { getStage } from "../core/stage";
+import type { GameState } from "../core/types";
 
 interface RenderSnapshot {
   stage: number;
@@ -57,8 +51,6 @@ class YuukaScene extends Phaser.Scene {
   private upperSprite?: Phaser.GameObjects.Image;
   private lowerSprite?: Phaser.GameObjects.Image;
   private yuukaPlaceholder?: Phaser.GameObjects.Rectangle;
-  private compareSprite?: Phaser.GameObjects.Image;
-  private comparePlaceholder?: Phaser.GameObjects.Rectangle;
 
   private debugEnabled = false;
   private debugGraphics?: Phaser.GameObjects.Graphics;
@@ -101,15 +93,6 @@ class YuukaScene extends Phaser.Scene {
     );
     this.yuukaPlaceholder.setDepth(1);
 
-    this.comparePlaceholder = this.add.rectangle(
-      RENDER_WIDTH * 0.82,
-      RENDER_HEIGHT * 0.78,
-      120,
-      120,
-      PLACEHOLDER_COMPARE_COLOR,
-    );
-    this.comparePlaceholder.setDepth(2);
-
     this.debugGraphics = this.add.graphics();
     this.debugGraphics.setDepth(9);
     this.input.keyboard?.on("keydown-D", () => {
@@ -141,7 +124,6 @@ class YuukaScene extends Phaser.Scene {
       this.mode = "normal";
       this.giantBaseScale11 = undefined;
       this.didInitVisual = false;
-      this.updateComparison(stage);
       this.updateDebugOverlay();
       this.prevStage = stage;
       return;
@@ -168,7 +150,6 @@ class YuukaScene extends Phaser.Scene {
       this.applyGiantScale(stage);
     }
 
-    this.updateComparison(stage);
     this.prevStage = stage;
   }
 
@@ -272,32 +253,6 @@ class YuukaScene extends Phaser.Scene {
     this.upperSprite.setPosition(centerX, upperY);
 
     this.updateDebugOverlay();
-  }
-
-  private updateComparison(stage: number): void {
-    const comparison = getComparisonKind(stage);
-    if (!comparison) {
-      this.compareSprite?.setVisible(false);
-      this.comparePlaceholder?.setVisible(false);
-      return;
-    }
-
-    const textureKey = this.resolveComparisonTexture(comparison);
-    const hasTexture = this.textures.exists(textureKey);
-    if (hasTexture) {
-      if (!this.compareSprite) {
-        this.compareSprite = this.add.image(RENDER_WIDTH * 0.82, RENDER_HEIGHT * 0.78, textureKey);
-        this.compareSprite.setDepth(2);
-      } else {
-        this.compareSprite.setTexture(textureKey);
-      }
-      this.compareSprite.setVisible(true);
-      this.compareSprite.setDisplaySize(120, 120);
-    } else if (this.compareSprite) {
-      this.compareSprite.setVisible(false);
-    }
-
-    this.comparePlaceholder?.setVisible(!hasTexture);
   }
 
   private updateDebugOverlay(): void {
@@ -430,14 +385,6 @@ class YuukaScene extends Phaser.Scene {
     const lowerNativeH = this.getLowerNativeHeight();
     const denominator = Math.max(lowerNativeH - 10, 1);
     return this.getFootY() / denominator;
-  }
-
-  private resolveComparisonTexture(kind: ComparisonKind): string {
-    if (kind === "chair") return ASSET_KEY_CHAIR;
-    if (kind === "desk") return ASSET_KEY_DESK;
-    if (kind === "person") return ASSET_KEY_PERSON;
-    if (kind === "car") return ASSET_KEY_CAR;
-    return ASSET_KEY_BUILDING;
   }
 
   private syncBackgroundToPanel(): void {
