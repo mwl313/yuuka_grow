@@ -43,6 +43,7 @@ export interface Settings {
   voiceVolume: number;
   masterMuted: boolean;
   language: LanguageCode;
+  nickname: string;
 }
 
 export interface SaveData {

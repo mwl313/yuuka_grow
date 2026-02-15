@@ -1,0 +1,419 @@
+import { computeRankPercentile, generateShareId, sanitizeNickname, toNonNegativeInt } from "./lib/runUtils";
+
+type EndingCategory = "normal" | "bankrupt" | "stress" | "special";
+type SortKey = "credit" | "thigh";
+
+interface AppEnv {
+	DB: D1Database;
+}
+
+interface SubmitPayload {
+	nickname?: unknown;
+	endingCategory?: unknown;
+	endingId?: unknown;
+	survivalDays?: unknown;
+	finalCredits?: unknown;
+	finalThighCm?: unknown;
+	finalStage?: unknown;
+	submittedAtClient?: unknown;
+	clientVersion?: unknown;
+}
+
+interface RunRecord {
+	nickname: string;
+	ending_category: string;
+	ending_id: string;
+	survival_days: number;
+	final_credits: number;
+	final_thigh_cm: number;
+	final_stage: number;
+	submitted_at_client: string;
+	submitted_at_server: string;
+}
+
+interface RankOutput {
+	rank: number;
+	total: number;
+	percentileTop: number;
+}
+
+const CORS_METHODS = "GET, POST, OPTIONS";
+const CORS_HEADERS = "Content-Type";
+const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special"]);
+
+function escapeHtml(input: string): string {
+	return input
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
+}
+
+function getAllowedCorsOrigin(request: Request): string | null {
+	const origin = request.headers.get("Origin");
+	if (!origin) return null;
+
+	let parsedOrigin: URL;
+	try {
+		parsedOrigin = new URL(origin);
+	} catch {
+		return null;
+	}
+
+	if (!/^https?:$/i.test(parsedOrigin.protocol)) return null;
+	if (parsedOrigin.hostname === "localhost" || parsedOrigin.hostname === "127.0.0.1") {
+		return origin;
+	}
+
+	try {
+		const requestOrigin = new URL(request.url).origin;
+		return requestOrigin === origin ? origin : null;
+	} catch {
+		return null;
+	}
+}
+
+function applyCorsHeaders(headers: Headers, origin: string | null): void {
+	headers.set("Vary", "Origin");
+	if (!origin) return;
+	headers.set("Access-Control-Allow-Origin", origin);
+	headers.set("Access-Control-Allow-Methods", CORS_METHODS);
+	headers.set("Access-Control-Allow-Headers", CORS_HEADERS);
+}
+
+function jsonResponse(payload: unknown, status: number, origin: string | null): Response {
+	const headers = new Headers({ "content-type": "application/json; charset=utf-8" });
+	applyCorsHeaders(headers, origin);
+	return new Response(JSON.stringify(payload), { status, headers });
+}
+
+function htmlResponse(html: string, status: number, origin: string | null): Response {
+	const headers = new Headers({ "content-type": "text/html; charset=utf-8" });
+	applyCorsHeaders(headers, origin);
+	return new Response(html, { status, headers });
+}
+
+function optionsResponse(origin: string | null): Response {
+	const headers = new Headers();
+	applyCorsHeaders(headers, origin);
+	return new Response(null, { status: 204, headers });
+}
+
+function parseSortParam(value: string | null): SortKey {
+	return value === "thigh" ? "thigh" : "credit";
+}
+
+function parseLimitParam(value: string | null): number {
+	const raw = Number.parseInt(value ?? "", 10);
+	if (!Number.isFinite(raw)) return 100;
+	return Math.min(100, Math.max(1, raw));
+}
+
+function normalizeSubmittedAtClient(value: unknown, fallbackIso: string): string {
+	if (typeof value !== "string") return fallbackIso;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed.slice(0, 64) : fallbackIso;
+}
+
+function normalizeClientVersion(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed.slice(0, 32) : null;
+}
+
+function normalizeEndingId(value: unknown): string {
+	if (typeof value !== "string") return "unknown";
+	const trimmed = value.trim();
+	return (trimmed.length > 0 ? trimmed : "unknown").slice(0, 64);
+}
+
+async function scalarNumber(db: D1Database, sql: string, bindings: unknown[] = []): Promise<number> {
+	const row = await db.prepare(sql).bind(...bindings).first<{ value: number | string }>();
+	if (!row) return 0;
+	return Number(row.value ?? 0);
+}
+
+async function computeRank(
+	db: D1Database,
+	column: "final_credits" | "final_thigh_cm",
+	value: number,
+): Promise<RankOutput> {
+	const total = await scalarNumber(db, "SELECT COUNT(*) AS value FROM runs");
+	const higher = await scalarNumber(db, `SELECT COUNT(*) AS value FROM runs WHERE ${column} > ?`, [value]);
+	const rank = 1 + higher;
+	return {
+		rank,
+		total,
+		percentileTop: computeRankPercentile(rank, total),
+	};
+}
+
+async function insertRunAndGetShareId(
+	db: D1Database,
+	params: {
+		nickname: string;
+		endingCategory: EndingCategory;
+		endingId: string;
+		survivalDays: number;
+		finalCredits: number;
+		finalThighCm: number;
+		finalStage: number;
+		submittedAtClient: string;
+		submittedAtServer: string;
+		clientVersion: string | null;
+	},
+): Promise<string> {
+	const sql = `
+		INSERT INTO runs (
+			share_id,
+			nickname,
+			ending_category,
+			ending_id,
+			survival_days,
+			final_credits,
+			final_thigh_cm,
+			final_stage,
+			submitted_at_client,
+			submitted_at_server,
+			client_version
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`;
+
+	for (let i = 0; i < 6; i += 1) {
+		const shareId = generateShareId();
+		try {
+			await db
+				.prepare(sql)
+				.bind(
+					shareId,
+					params.nickname,
+					params.endingCategory,
+					params.endingId,
+					params.survivalDays,
+					params.finalCredits,
+					params.finalThighCm,
+					params.finalStage,
+					params.submittedAtClient,
+					params.submittedAtServer,
+					params.clientVersion,
+				)
+				.run();
+			return shareId;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message.toLowerCase().includes("unique") || message.toLowerCase().includes("constraint")) {
+				continue;
+			}
+			throw error;
+		}
+	}
+	throw new Error("Failed to generate unique share id");
+}
+
+async function handleSubmit(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	let payload: SubmitPayload;
+	try {
+		payload = (await request.json()) as SubmitPayload;
+	} catch {
+		return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+	}
+
+	const endingCategoryRaw = typeof payload.endingCategory === "string" ? payload.endingCategory : "";
+	if (!ENDING_CATEGORY_SET.has(endingCategoryRaw as EndingCategory)) {
+		return jsonResponse({ ok: false, error: "Invalid endingCategory" }, 400, origin);
+	}
+
+	const submittedAtServer = new Date().toISOString();
+	const nickname = sanitizeNickname(payload.nickname);
+	const endingId = normalizeEndingId(payload.endingId);
+	const survivalDays = toNonNegativeInt(payload.survivalDays);
+	const finalCredits = toNonNegativeInt(payload.finalCredits);
+	const finalThighCm = toNonNegativeInt(payload.finalThighCm);
+	const finalStage = toNonNegativeInt(payload.finalStage);
+	const submittedAtClient = normalizeSubmittedAtClient(payload.submittedAtClient, submittedAtServer);
+	const clientVersion = normalizeClientVersion(payload.clientVersion);
+
+	const shareId = await insertRunAndGetShareId(env.DB, {
+		nickname,
+		endingCategory: endingCategoryRaw as EndingCategory,
+		endingId,
+		survivalDays,
+		finalCredits,
+		finalThighCm,
+		finalStage,
+		submittedAtClient,
+		submittedAtServer,
+		clientVersion,
+	});
+
+	const [credit, thigh] = await Promise.all([
+		computeRank(env.DB, "final_credits", finalCredits),
+		computeRank(env.DB, "final_thigh_cm", finalThighCm),
+	]);
+
+	return jsonResponse(
+		{
+			ok: true,
+			shareId,
+			submittedAtServer,
+			rank: { credit, thigh },
+		},
+		200,
+		origin,
+	);
+}
+
+async function handleLeaderboard(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	const url = new URL(request.url);
+	const sort = parseSortParam(url.searchParams.get("sort"));
+	const limit = parseLimitParam(url.searchParams.get("limit"));
+	const orderBy = sort === "thigh" ? "final_thigh_cm DESC" : "final_credits DESC";
+	const sql = `
+		SELECT
+			nickname,
+			ending_category,
+			ending_id,
+			survival_days,
+			final_credits,
+			final_thigh_cm,
+			final_stage,
+			submitted_at_client,
+			submitted_at_server
+		FROM runs
+		ORDER BY ${orderBy}, submitted_at_server DESC
+		LIMIT ${limit}
+	`;
+	const rows = await env.DB.prepare(sql).all<RunRecord>();
+	return jsonResponse(
+		{
+			ok: true,
+			sort,
+			items: rows.results ?? [],
+		},
+		200,
+		origin,
+	);
+}
+
+function formatTopPercent(percentile: number): string {
+	return `${percentile.toFixed(2)}%`;
+}
+
+async function handleSharePage(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	const url = new URL(request.url);
+	const shareId = decodeURIComponent(url.pathname.replace(/^\/share\//, "").trim());
+	if (!shareId) {
+		return htmlResponse("<h1>Not Found</h1>", 404, origin);
+	}
+
+	const row = await env.DB
+		.prepare(
+			`SELECT
+				nickname,
+				ending_category,
+				ending_id,
+				survival_days,
+				final_credits,
+				final_thigh_cm,
+				final_stage,
+				submitted_at_client,
+				submitted_at_server
+			FROM runs
+			WHERE share_id = ?
+			LIMIT 1`,
+		)
+		.bind(shareId)
+		.first<RunRecord>();
+
+	if (!row) {
+		return htmlResponse("<h1>Share Not Found</h1>", 404, origin);
+	}
+
+	const [credit, thigh] = await Promise.all([
+		computeRank(env.DB, "final_credits", row.final_credits),
+		computeRank(env.DB, "final_thigh_cm", row.final_thigh_cm),
+	]);
+
+	const title = `${row.nickname}'s Yuuka Grow Run`;
+	const description = `Ending ${row.ending_id} - Day ${row.survival_days} - Credits ${row.final_credits} - Thigh ${row.final_thigh_cm}cm`;
+	const escapedTitle = escapeHtml(title);
+	const escapedDescription = escapeHtml(description);
+	const escapedNickname = escapeHtml(row.nickname);
+	const escapedEnding = escapeHtml(`${row.ending_category} (${row.ending_id})`);
+
+	const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta property="og:title" content="${escapedTitle}" />
+  <meta property="og:description" content="${escapedDescription}" />
+  <meta property="og:type" content="website" />
+  <title>${escapedTitle}</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #faf8ff; color: #1f1b2d; }
+    main { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+    .card { width: min(520px, 92vw); background: #fff; border-radius: 16px; border: 1px solid #e6dff5; box-shadow: 0 16px 40px rgba(40, 18, 68, 0.08); padding: 22px; }
+    h1 { margin: 0 0 12px; font-size: 1.35rem; }
+    p { margin: 6px 0; }
+    .meta { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee6ff; }
+    a { display: inline-block; margin-top: 14px; text-decoration: none; background: #e267b4; color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>${escapedNickname}</h1>
+      <p><strong>Ending:</strong> ${escapedEnding}</p>
+      <p><strong>Days:</strong> ${row.survival_days}</p>
+      <p><strong>Credits:</strong> ${row.final_credits}</p>
+      <p><strong>Thigh:</strong> ${row.final_thigh_cm} cm</p>
+      <p><strong>Stage:</strong> ${row.final_stage}</p>
+      <div class="meta">
+        <p><strong>Credit Top:</strong> ${formatTopPercent(credit.percentileTop)}</p>
+        <p><strong>Thigh Top:</strong> ${formatTopPercent(thigh.percentileTop)}</p>
+      </div>
+      <a href="/">Play</a>
+    </section>
+  </main>
+</body>
+</html>`;
+
+	return htmlResponse(html, 200, origin);
+}
+
+function routeApiNotFound(origin: string | null): Response {
+	return jsonResponse({ ok: false, error: "Not Found" }, 404, origin);
+}
+
+export default {
+	async fetch(request: Request, env: AppEnv): Promise<Response> {
+		const url = new URL(request.url);
+		const origin = getAllowedCorsOrigin(request);
+
+		if (request.method === "OPTIONS") {
+			return optionsResponse(origin);
+		}
+
+		try {
+			if (request.method === "POST" && url.pathname === "/api/submit") {
+				return await handleSubmit(request, env, origin);
+			}
+			if (request.method === "GET" && url.pathname === "/api/leaderboard") {
+				return await handleLeaderboard(request, env, origin);
+			}
+			if (request.method === "GET" && url.pathname.startsWith("/share/")) {
+				return await handleSharePage(request, env, origin);
+			}
+			if (url.pathname.startsWith("/api/")) {
+				return routeApiNotFound(origin);
+			}
+			return new Response("Yuuka Grow API", { status: 200 });
+		} catch (error) {
+			console.error("Unhandled error", error);
+			return jsonResponse({ ok: false, error: "Internal Server Error" }, 500, origin);
+		}
+	},
+} satisfies ExportedHandler<AppEnv>;

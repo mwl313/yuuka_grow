@@ -1,5 +1,7 @@
+import { buildShareUrl, fetchLeaderboard, submitRun } from "../api/leaderboardApi";
+import type { LeaderboardItem, LeaderboardSort, RankEntry } from "../api/leaderboardApi";
 import { applyEat, applyGuest, applyWork } from "../core/actions";
-import { APP_VERSION, AUTHOR_NAME, IP_LABEL, VOLUME_STEP } from "../core/constants";
+import { APP_VERSION, AUTHOR_NAME, DEFAULT_NICKNAME, IP_LABEL, VOLUME_STEP } from "../core/constants";
 import { checkImmediateBankrupt } from "../core/endings";
 import { decodeLog } from "../core/logger";
 import { defaultRng } from "../core/rng";
@@ -8,29 +10,38 @@ import { createInitialState } from "../core/state";
 import type { GameState, LanguageCode, RunResult, SaveData, Settings, StepResult } from "../core/types";
 import { formatNumber, getLanguage, onLanguageChange, setLanguage, t } from "../i18n";
 import { YuukaRenderer } from "../render/yuukaRenderer";
-import { parseShareQuery, buildShareRelativeUrl } from "../share/shareLink";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
 
-type ScreenId = "lobby" | "game" | "score";
+type ScreenId = "lobby" | "game" | "score" | "leaderboard";
 
 interface UiRefs {
   lobby: HTMLElement;
   game: HTMLElement;
   score: HTMLElement;
+  leaderboard: HTMLElement;
   settingsModal: HTMLElement;
+  nicknameModal: HTMLElement;
   endingOverlay: HTMLElement;
   btnStart: HTMLButtonElement;
   btnSettings: HTMLButtonElement;
+  btnNickname: HTMLButtonElement;
   btnLeaderboard: HTMLButtonElement;
   btnCloseSettings: HTMLButtonElement;
+  btnNicknameApply: HTMLButtonElement;
+  btnNicknameCancel: HTMLButtonElement;
+  nicknameInput: HTMLInputElement;
   btnWork: HTMLButtonElement;
   btnEat: HTMLButtonElement;
   btnGuest: HTMLButtonElement;
   btnContinue: HTMLButtonElement;
   btnRetry: HTMLButtonElement;
   btnBack: HTMLButtonElement;
+  btnUpload: HTMLButtonElement;
   btnShare: HTMLButtonElement;
+  btnLeaderSortCredit: HTMLButtonElement;
+  btnLeaderSortThigh: HTMLButtonElement;
+  btnLeaderBack: HTMLButtonElement;
   btnMiniLobby: HTMLButtonElement;
   btnMiniSound: HTMLButtonElement;
   hudDay: HTMLElement;
@@ -47,6 +58,12 @@ interface UiRefs {
   scoreDay: HTMLElement;
   scoreCredits: HTMLElement;
   scoreStress: HTMLElement;
+  scoreRankCredit: HTMLElement;
+  scoreRankThigh: HTMLElement;
+  scoreUploadStatus: HTMLElement;
+  lobbyNickname: HTMLElement;
+  leaderboardStatus: HTMLElement;
+  leaderboardBody: HTMLTableSectionElement;
   bgmRange: HTMLInputElement;
   sfxRange: HTMLInputElement;
   voiceRange: HTMLInputElement;
@@ -75,6 +92,27 @@ function ensureValidOngoingState(data: SaveData): SaveData {
   };
 }
 
+interface UploadedMeta {
+  shareId: string;
+  credit: RankEntry;
+  thigh: RankEntry;
+}
+
+function sanitizeNickname(raw: string): string {
+  const trimmed = raw.trim();
+  const filtered = trimmed.replace(/[^A-Za-z0-9\u3131-\u318E\uAC00-\uD7A3 ]+/g, "");
+  const clipped = filtered.slice(0, 12).trim();
+  return clipped.length > 0 ? clipped : DEFAULT_NICKNAME;
+}
+
+function formatRankLine(entry: RankEntry): { percent: string; rank: string; total: string } {
+  return {
+    percent: entry.percentileTop.toFixed(1),
+    rank: formatNumber(entry.rank),
+    total: formatNumber(entry.total),
+  };
+}
+
 export class UiController {
   private readonly root: HTMLElement;
   private readonly refs: UiRefs;
@@ -83,7 +121,13 @@ export class UiController {
   private save: SaveData;
   private settings: Settings;
   private latestResult: RunResult | null = null;
+  private uploadedMeta: UploadedMeta | null = null;
   private activeScreen: ScreenId = "lobby";
+  private isUploading = false;
+  private leaderboardSort: LeaderboardSort = "credit";
+  private leaderboardItems: LeaderboardItem[] = [];
+  private leaderboardLoading = false;
+  private leaderboardError: string | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -97,6 +141,7 @@ export class UiController {
     this.bindEvents();
     this.syncSettingsUi();
     this.renderGameUi();
+    this.renderLeaderboard();
     this.showScreen("lobby");
     onLanguageChange(() => this.handleLanguageChanged());
     saveData(this.save);
@@ -109,10 +154,12 @@ export class UiController {
           <div class="skin-panel lobby-card">
             <h1 id="lobby-title" class="font-title"></h1>
             <p id="lobby-version"></p>
+            <p id="lobby-nickname" class="lobby-foot"></p>
             <div class="stack-buttons">
               <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka_dance.gif" alt="" />
               <button id="btn-start" class="skin-button font-title"></button>
               <button id="btn-settings" class="skin-button font-title"></button>
+              <button id="btn-nickname" class="skin-button font-title"></button>
               <button id="btn-leaderboard" class="skin-button font-title"></button>
             </div>
             <p id="lobby-disclaimer" class="lobby-disclaimer"></p>
@@ -157,11 +204,44 @@ export class UiController {
               <li class="score-row"><span class="score-label" id="score-label-credits"></span><span class="score-value" id="score-credits"></span></li>
               <li class="score-row"><span class="score-label" id="score-label-stress"></span><span class="score-value" id="score-stress"></span></li>
             </ul>
+            <div class="score-rank-box">
+              <p id="score-rank-credit" class="score-rank-line"></p>
+              <p id="score-rank-thigh" class="score-rank-line"></p>
+            </div>
+            <p id="score-upload-status" class="score-upload-status"></p>
             <div class="stack-buttons">
               <button id="btn-retry" class="skin-button font-title"></button>
               <button id="btn-back" class="skin-button font-title"></button>
+              <button id="btn-upload" class="skin-button font-title"></button>
               <button id="btn-share" class="skin-button font-title"></button>
             </div>
+          </div>
+        </section>
+
+        <section id="screen-leaderboard" class="screen">
+          <div class="skin-panel score-card leaderboard-card">
+            <h2 id="leaderboard-title" class="font-title"></h2>
+            <div class="leaderboard-sort">
+              <button id="btn-leader-sort-credit" class="skin-button font-title"></button>
+              <button id="btn-leader-sort-thigh" class="skin-button font-title"></button>
+            </div>
+            <p id="leaderboard-status" class="leaderboard-status"></p>
+            <div class="leaderboard-table-wrap">
+              <table class="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th id="leader-col-nickname"></th>
+                    <th id="leader-col-credits"></th>
+                    <th id="leader-col-thigh"></th>
+                    <th id="leader-col-ending"></th>
+                    <th id="leader-col-days"></th>
+                    <th id="leader-col-submitted"></th>
+                  </tr>
+                </thead>
+                <tbody id="leaderboard-body"></tbody>
+              </table>
+            </div>
+            <button id="btn-leader-back" class="skin-button font-title"></button>
           </div>
         </section>
 
@@ -200,6 +280,20 @@ export class UiController {
           </div>
         </div>
 
+        <div id="nickname-modal" class="overlay hidden">
+          <div class="skin-panel modal-card">
+            <h2 id="nickname-title" class="font-title"></h2>
+            <label class="settings-row">
+              <span id="nickname-label"></span>
+              <input id="nickname-input" type="text" maxlength="12" />
+            </label>
+            <div class="confirm-actions">
+              <button id="btn-nickname-apply" class="skin-button font-title"></button>
+              <button id="btn-nickname-cancel" class="skin-button font-title"></button>
+            </div>
+          </div>
+        </div>
+
         <div id="confirm-overlay" class="overlay hidden">
           <div class="skin-panel modal-card confirm-card">
             <p id="confirm-text"></p>
@@ -224,19 +318,29 @@ export class UiController {
       lobby: pick("screen-lobby"),
       game: pick("screen-game"),
       score: pick("screen-score"),
+      leaderboard: pick("screen-leaderboard"),
       settingsModal: pick("settings-modal"),
+      nicknameModal: pick("nickname-modal"),
       endingOverlay: pick("ending-overlay"),
       btnStart: pick("btn-start"),
       btnSettings: pick("btn-settings"),
+      btnNickname: pick("btn-nickname"),
       btnLeaderboard: pick("btn-leaderboard"),
       btnCloseSettings: pick("btn-close-settings"),
+      btnNicknameApply: pick("btn-nickname-apply"),
+      btnNicknameCancel: pick("btn-nickname-cancel"),
+      nicknameInput: pick("nickname-input"),
       btnWork: pick("btn-work"),
       btnEat: pick("btn-eat"),
       btnGuest: pick("btn-guest"),
       btnContinue: pick("btn-continue"),
       btnRetry: pick("btn-retry"),
       btnBack: pick("btn-back"),
+      btnUpload: pick("btn-upload"),
       btnShare: pick("btn-share"),
+      btnLeaderSortCredit: pick("btn-leader-sort-credit"),
+      btnLeaderSortThigh: pick("btn-leader-sort-thigh"),
+      btnLeaderBack: pick("btn-leader-back"),
       btnMiniLobby: pick("btn-mini-lobby"),
       btnMiniSound: pick("btn-mini-sound"),
       hudDay: pick("hud-day"),
@@ -253,6 +357,12 @@ export class UiController {
       scoreDay: pick("score-day"),
       scoreCredits: pick("score-credits"),
       scoreStress: pick("score-stress"),
+      scoreRankCredit: pick("score-rank-credit"),
+      scoreRankThigh: pick("score-rank-thigh"),
+      scoreUploadStatus: pick("score-upload-status"),
+      lobbyNickname: pick("lobby-nickname"),
+      leaderboardStatus: pick("leaderboard-status"),
+      leaderboardBody: pick("leaderboard-body"),
       bgmRange: pick("settings-bgm-range"),
       sfxRange: pick("settings-sfx-range"),
       voiceRange: pick("settings-voice-range"),
@@ -271,9 +381,11 @@ export class UiController {
     this.setText("lobby-disclaimer", t("lobby.disclaimer"));
     this.setText("lobby-credits", t("lobby.credits", { author: AUTHOR_NAME }));
     this.setText("lobby-ip", t("lobby.ip", { ip: IP_LABEL }));
+    this.setText("lobby-nickname", t("lobby.nicknameCurrent", { nickname: this.settings.nickname }));
 
     this.refs.btnStart.textContent = t("menu.start");
     this.refs.btnSettings.textContent = t("menu.options");
+    this.refs.btnNickname.textContent = t("lobby.btnNickname");
     this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
     this.refs.btnWork.textContent = t("game.action.work");
     this.refs.btnEat.textContent = t("game.action.eat");
@@ -281,8 +393,12 @@ export class UiController {
     this.refs.btnContinue.textContent = t("ending.continue");
     this.refs.btnRetry.textContent = t("score.btnRetry");
     this.refs.btnBack.textContent = t("score.btnBack");
+    this.refs.btnUpload.textContent = this.isUploading ? t("score.uploading") : t("score.btnUpload");
     this.refs.btnShare.textContent = t("result.share");
     this.refs.btnCloseSettings.textContent = t("settings.close");
+    this.refs.btnLeaderSortCredit.textContent = t("leaderboard.sort.credit");
+    this.refs.btnLeaderSortThigh.textContent = t("leaderboard.sort.thigh");
+    this.refs.btnLeaderBack.textContent = t("leaderboard.back");
 
     this.setText("settings-title", t("options.title"));
     this.setText("settings-bgm", t("settings.bgm"));
@@ -295,6 +411,11 @@ export class UiController {
     this.refs.confirmText.textContent = t("confirm.abandon.message");
     this.refs.btnConfirmYes.textContent = t("confirm.yes");
     this.refs.btnConfirmNo.textContent = t("confirm.no");
+    this.setText("nickname-title", t("nickname.title"));
+    this.setText("nickname-label", t("nickname.label"));
+    this.refs.nicknameInput.placeholder = t("nickname.placeholder");
+    this.refs.btnNicknameApply.textContent = t("nickname.apply");
+    this.refs.btnNicknameCancel.textContent = t("nickname.cancel");
 
     this.setText("score-title", t("result.title"));
     this.setText("score-label-ending", t("result.ending"));
@@ -302,23 +423,39 @@ export class UiController {
     this.setText("score-label-day", t("result.dayReached"));
     this.setText("score-label-credits", t("result.finalCredits"));
     this.setText("score-label-stress", t("result.finalStress"));
+    this.setText("leaderboard-title", t("leaderboard.title"));
+    this.setText("leader-col-nickname", t("leaderboard.col.nickname"));
+    this.setText("leader-col-credits", t("leaderboard.col.credits"));
+    this.setText("leader-col-thigh", t("leaderboard.col.thigh"));
+    this.setText("leader-col-ending", t("leaderboard.col.ending"));
+    this.setText("leader-col-days", t("leaderboard.col.days"));
+    this.setText("leader-col-submitted", t("leaderboard.col.submitted"));
     this.setText("log-title", t("log.title"));
     this.updateSoundToggleUi();
+    this.updateScoreMeta();
+    this.renderLeaderboard();
   }
 
   private bindEvents(): void {
     [
       this.refs.btnStart,
       this.refs.btnSettings,
+      this.refs.btnNickname,
       this.refs.btnLeaderboard,
       this.refs.btnCloseSettings,
+      this.refs.btnNicknameApply,
+      this.refs.btnNicknameCancel,
       this.refs.btnWork,
       this.refs.btnEat,
       this.refs.btnGuest,
       this.refs.btnContinue,
       this.refs.btnRetry,
       this.refs.btnBack,
+      this.refs.btnUpload,
       this.refs.btnShare,
+      this.refs.btnLeaderSortCredit,
+      this.refs.btnLeaderSortThigh,
+      this.refs.btnLeaderBack,
       this.refs.btnMiniLobby,
       this.refs.btnMiniSound,
       this.refs.btnConfirmYes,
@@ -327,8 +464,19 @@ export class UiController {
 
     this.refs.btnStart.addEventListener("click", () => this.startGame());
     this.refs.btnSettings.addEventListener("click", () => this.openSettings(true));
-    this.refs.btnLeaderboard.addEventListener("click", () => this.openLeaderboardStub());
+    this.refs.btnNickname.addEventListener("click", () => this.openNicknameModal(true));
+    this.refs.btnLeaderboard.addEventListener("click", () => {
+      void this.openLeaderboard();
+    });
     this.refs.btnCloseSettings.addEventListener("click", () => this.openSettings(false));
+    this.refs.btnNicknameApply.addEventListener("click", () => this.applyNickname());
+    this.refs.btnNicknameCancel.addEventListener("click", () => this.openNicknameModal(false));
+    this.refs.nicknameInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.applyNickname();
+      }
+    });
     this.refs.btnWork.addEventListener("click", () => this.handleStep(applyWork(this.state)));
     this.refs.btnEat.addEventListener("click", () => this.handleStep(applyEat(this.state)));
     this.refs.btnGuest.addEventListener("click", () => this.handleStep(applyGuest(this.state, defaultRng)));
@@ -339,7 +487,19 @@ export class UiController {
     });
     this.refs.btnRetry.addEventListener("click", () => this.retryGame());
     this.refs.btnBack.addEventListener("click", () => this.showScreen("lobby"));
-    this.refs.btnShare.addEventListener("click", () => this.shareResult());
+    this.refs.btnUpload.addEventListener("click", () => {
+      void this.uploadResult();
+    });
+    this.refs.btnShare.addEventListener("click", () => {
+      void this.shareResult();
+    });
+    this.refs.btnLeaderSortCredit.addEventListener("click", () => {
+      void this.changeLeaderboardSort("credit");
+    });
+    this.refs.btnLeaderSortThigh.addEventListener("click", () => {
+      void this.changeLeaderboardSort("thigh");
+    });
+    this.refs.btnLeaderBack.addEventListener("click", () => this.showScreen("lobby"));
     this.refs.btnMiniLobby.addEventListener("click", () => this.openAbandonConfirm(true));
     this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
     this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
@@ -356,6 +516,7 @@ export class UiController {
     this.refs.sfxRange.value = String(this.settings.sfxVolume);
     this.refs.voiceRange.value = String(this.settings.voiceVolume);
     this.refs.languageSelect.value = this.settings.language;
+    this.refs.nicknameInput.value = this.settings.nickname;
     this.updateSoundToggleUi();
   }
 
@@ -367,6 +528,7 @@ export class UiController {
       voiceVolume: Number(this.refs.voiceRange.value),
       masterMuted: this.settings.masterMuted,
       language,
+      nickname: this.settings.nickname,
     };
     setLanguage(language);
     saveSettings(this.settings);
@@ -390,6 +552,8 @@ export class UiController {
   private resetForNewRun(): void {
     this.state = createInitialState();
     this.latestResult = null;
+    this.uploadedMeta = null;
+    this.isUploading = false;
     this.save = {
       ...this.save,
       state: this.state,
@@ -399,6 +563,25 @@ export class UiController {
 
   private openSettings(open: boolean): void {
     this.refs.settingsModal.classList.toggle("hidden", !open);
+  }
+
+  private openNicknameModal(open: boolean): void {
+    this.refs.nicknameModal.classList.toggle("hidden", !open);
+    if (open) {
+      this.refs.nicknameInput.value = this.settings.nickname;
+      this.refs.nicknameInput.focus();
+      this.refs.nicknameInput.select();
+    }
+  }
+
+  private applyNickname(): void {
+    this.settings = {
+      ...this.settings,
+      nickname: sanitizeNickname(this.refs.nicknameInput.value),
+    };
+    saveSettings(this.settings);
+    this.openNicknameModal(false);
+    this.applyLabels();
   }
 
   private openAbandonConfirm(open: boolean): void {
@@ -426,15 +609,17 @@ export class UiController {
     this.refs.btnMiniSound.classList.toggle("muted", this.settings.masterMuted);
   }
 
-  private openLeaderboardStub(): void {
-    window.alert(t("lobby.leaderboardStub"));
-  }
-
   private showScreen(screen: ScreenId): void {
     this.activeScreen = screen;
     this.refs.lobby.classList.toggle("active", screen === "lobby");
     this.refs.game.classList.toggle("active", screen === "game");
     this.refs.score.classList.toggle("active", screen === "score");
+    this.refs.leaderboard.classList.toggle("active", screen === "leaderboard");
+  }
+
+  private async openLeaderboard(): Promise<void> {
+    this.showScreen("leaderboard");
+    await this.loadLeaderboard();
   }
 
   private ensureRenderer(): void {
@@ -463,6 +648,8 @@ export class UiController {
 
   private onEnded(runResult: RunResult): void {
     this.latestResult = runResult;
+    this.uploadedMeta = null;
+    this.isUploading = false;
     this.save = recordRunResult(
       {
         ...this.save,
@@ -583,16 +770,180 @@ export class UiController {
       value: formatNumber(this.latestResult.finalMoney),
     });
     this.refs.scoreStress.textContent = formatNumber(this.latestResult.finalStress);
+    this.updateScoreMeta();
   }
 
-  private shareResult(): void {
-    if (!this.latestResult) return;
-    const url = buildShareRelativeUrl(this.latestResult);
-    if (!parseShareQuery(url.split("?")[1] ? `?${url.split("?")[1]}` : "")) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      void navigator.clipboard.writeText(url);
+  private updateScoreMeta(messageKey?: string): void {
+    this.refs.btnUpload.textContent = this.isUploading ? t("score.uploading") : t("score.btnUpload");
+    this.refs.btnUpload.disabled = this.isUploading || !this.latestResult;
+    this.refs.btnShare.disabled = !this.latestResult;
+
+    if (this.uploadedMeta) {
+      const credit = formatRankLine(this.uploadedMeta.credit);
+      const thigh = formatRankLine(this.uploadedMeta.thigh);
+      this.refs.scoreRankCredit.textContent = t("score.rank.credit", credit);
+      this.refs.scoreRankThigh.textContent = t("score.rank.thigh", thigh);
+    } else {
+      this.refs.scoreRankCredit.textContent = t("score.rank.pending.credit");
+      this.refs.scoreRankThigh.textContent = t("score.rank.pending.thigh");
     }
-    window.open(url, "_blank", "noopener,noreferrer");
+
+    this.refs.scoreUploadStatus.textContent = messageKey ? t(messageKey) : "";
+  }
+
+  private async uploadResult(): Promise<void> {
+    if (!this.latestResult || this.isUploading) return;
+    this.isUploading = true;
+    this.updateScoreMeta();
+    let statusKey = "score.upload.failed";
+
+    try {
+      const response = await submitRun({
+        nickname: this.settings.nickname,
+        endingCategory: this.latestResult.endingId,
+        endingId: this.latestResult.endingId,
+        survivalDays: this.latestResult.dayReached,
+        finalCredits: Math.round(this.latestResult.finalMoney),
+        finalThighCm: Math.round(this.latestResult.finalThighCm),
+        finalStage: getStage(this.latestResult.finalThighCm),
+        submittedAtClient: new Date().toISOString(),
+        clientVersion: APP_VERSION || "dev",
+      });
+
+      this.uploadedMeta = {
+        shareId: response.shareId,
+        credit: response.rank.credit,
+        thigh: response.rank.thigh,
+      };
+      statusKey = "score.upload.success";
+    } catch (error) {
+      console.error(error);
+    } finally {
+      this.isUploading = false;
+      this.updateScoreMeta(statusKey);
+    }
+  }
+
+  private buildShareText(): string {
+    if (!this.latestResult) return t("score.share.text.base");
+    if (!this.uploadedMeta) return t("score.share.text.base");
+    return t("score.share.text.withRank", {
+      nickname: this.settings.nickname,
+      credits: formatNumber(this.latestResult.finalMoney),
+      thigh: formatNumber(this.latestResult.finalThighCm),
+      creditTop: this.uploadedMeta.credit.percentileTop.toFixed(1),
+      thighTop: this.uploadedMeta.thigh.percentileTop.toFixed(1),
+    });
+  }
+
+  private async shareResult(): Promise<void> {
+    if (!this.latestResult) return;
+    if (!this.uploadedMeta?.shareId) {
+      this.updateScoreMeta("score.share.needUpload");
+      return;
+    }
+
+    const url = buildShareUrl(this.uploadedMeta.shareId);
+    const title = t("result.share");
+    const text = this.buildShareText();
+
+    try {
+      if ("share" in navigator && typeof navigator.share === "function") {
+        await navigator.share({ title, text, url });
+        this.updateScoreMeta("score.share.done");
+        return;
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        this.updateScoreMeta("score.share.copied");
+        return;
+      }
+
+      window.prompt(t("score.share.manual"), url);
+      this.updateScoreMeta("score.share.done");
+    } catch (error) {
+      console.error(error);
+      this.updateScoreMeta("score.share.failed");
+    }
+  }
+
+  private async changeLeaderboardSort(sort: LeaderboardSort): Promise<void> {
+    if (this.leaderboardSort === sort && this.leaderboardItems.length > 0 && !this.leaderboardError) return;
+    this.leaderboardSort = sort;
+    await this.loadLeaderboard();
+  }
+
+  private async loadLeaderboard(): Promise<void> {
+    this.leaderboardLoading = true;
+    this.leaderboardError = null;
+    this.renderLeaderboard();
+
+    try {
+      const response = await fetchLeaderboard(this.leaderboardSort, 100);
+      this.leaderboardItems = response.items;
+    } catch (error) {
+      console.error(error);
+      this.leaderboardError = t("leaderboard.error");
+      this.leaderboardItems = [];
+    } finally {
+      this.leaderboardLoading = false;
+      this.renderLeaderboard();
+    }
+  }
+
+  private renderLeaderboard(): void {
+    this.refs.btnLeaderSortCredit.classList.toggle("active", this.leaderboardSort === "credit");
+    this.refs.btnLeaderSortThigh.classList.toggle("active", this.leaderboardSort === "thigh");
+    this.refs.leaderboardBody.innerHTML = "";
+
+    if (this.leaderboardLoading) {
+      this.refs.leaderboardStatus.textContent = t("leaderboard.loading");
+      return;
+    }
+
+    if (this.leaderboardError) {
+      this.refs.leaderboardStatus.textContent = this.leaderboardError;
+      return;
+    }
+
+    if (this.leaderboardItems.length === 0) {
+      this.refs.leaderboardStatus.textContent = t("leaderboard.empty");
+      return;
+    }
+
+    this.refs.leaderboardStatus.textContent = "";
+    for (const item of this.leaderboardItems) {
+      const row = document.createElement("tr");
+      row.append(
+        this.createLeaderboardCell(item.nickname),
+        this.createLeaderboardCell(formatNumber(item.final_credits)),
+        this.createLeaderboardCell(`${formatNumber(item.final_thigh_cm)}cm`),
+        this.createLeaderboardCell(this.getEndingLabel(item.ending_id)),
+        this.createLeaderboardCell(formatNumber(item.survival_days)),
+        this.createLeaderboardCell(this.formatSubmittedDate(item.submitted_at_server)),
+      );
+      this.refs.leaderboardBody.append(row);
+    }
+  }
+
+  private createLeaderboardCell(value: string): HTMLTableCellElement {
+    const cell = document.createElement("td");
+    cell.textContent = value;
+    return cell;
+  }
+
+  private getEndingLabel(endingId: string): string {
+    const key = `ending.${endingId}.title`;
+    const translated = t(key);
+    if (!translated.startsWith("[[missing:")) return translated;
+    return endingId;
+  }
+
+  private formatSubmittedDate(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return date.toLocaleDateString();
   }
 
   private setText(id: string, value: string): void {

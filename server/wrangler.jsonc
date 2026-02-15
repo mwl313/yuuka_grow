@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "yuuka-grow-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-02-12",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "yuuka_grow_db",
+      "database_id": "f20685ec-4f63-40bb-a519-c3fa5f662550"
+    }
+  ]
+}

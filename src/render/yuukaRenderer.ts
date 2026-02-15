@@ -876,7 +876,7 @@ class YuukaScene extends Phaser.Scene {
     const soundKey = this.pickRandomKey(ASSET_KEYS_GROW.filter((key) => this.cache.audio.exists(key)));
     if (!soundKey) return;
     this.stopStageGrowSfx();
-    const sound = this.audioManager?.playSfx(soundKey);
+    const sound = this.audioManager?.playVoice(soundKey);
     if (!sound) return;
     sound.once("complete", () => {
       if (this.currentStageGrowSfx === sound) {
@@ -897,7 +897,7 @@ class YuukaScene extends Phaser.Scene {
     const soundKey = this.pickRandomKey(ASSET_KEYS_GROW.filter((key) => this.cache.audio.exists(key)));
     if (!soundKey) return;
     this.stopGiantTriggerSfx();
-    const main = this.audioManager?.playSfx(soundKey, { rate: GIANT_TRIGGER_GROW_PLAYBACK_RATE });
+    const main = this.audioManager?.playVoice(soundKey, { rate: GIANT_TRIGGER_GROW_PLAYBACK_RATE });
     if (!main) return;
     main.once("complete", () => {
       if (this.currentGiantTriggerSfx === main) {
@@ -987,7 +987,7 @@ class YuukaScene extends Phaser.Scene {
 
   private playGiantTriggerEcho(soundKey: string, volume: number, rate: number): void {
     if (!this.cache.audio.exists(soundKey)) return;
-    const echo = this.audioManager?.playSfx(soundKey, { volume, rate });
+    const echo = this.audioManager?.playVoice(soundKey, { volume, rate });
     if (!echo) return;
     this.giantTriggerEchoSounds.push(echo);
     echo.once("complete", () => {

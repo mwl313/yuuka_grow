@@ -135,6 +135,7 @@ export const DEFAULT_BGM_VOLUME = 0.5;
 export const DEFAULT_SFX_VOLUME = 0.5;
 export const DEFAULT_VOICE_VOLUME = 0.5;
 export const DEFAULT_MASTER_MUTED = false;
+export const DEFAULT_NICKNAME = "Sensei";
 export const VOLUME_MIN = 0;
 export const VOLUME_MAX = 1;
 export const VOLUME_STEP = 0.1;

@@ -2,6 +2,7 @@ import {
   DEFAULT_BGM_VOLUME,
   DEFAULT_LANGUAGE,
   DEFAULT_MASTER_MUTED,
+  DEFAULT_NICKNAME,
   DEFAULT_SFX_VOLUME,
   DEFAULT_VOICE_VOLUME,
   SETTINGS_KEY,
@@ -22,7 +23,16 @@ function createDefaultSettings(): Settings {
     voiceVolume: DEFAULT_VOICE_VOLUME,
     masterMuted: DEFAULT_MASTER_MUTED,
     language: DEFAULT_LANGUAGE,
+    nickname: DEFAULT_NICKNAME,
   };
+}
+
+function sanitizeNickname(value: unknown): string {
+  const raw = typeof value === "string" ? value : "";
+  const trimmed = raw.trim();
+  const filtered = trimmed.replace(/[^A-Za-z0-9\u3131-\u318E\uAC00-\uD7A3 ]+/g, "");
+  const shortened = filtered.slice(0, 12).trim();
+  return shortened.length > 0 ? shortened : DEFAULT_NICKNAME;
 }
 
 export function loadSettings(): Settings {
@@ -45,6 +55,7 @@ export function loadSettings(): Settings {
           : DEFAULT_VOICE_VOLUME,
       masterMuted: typeof parsed.masterMuted === "boolean" ? parsed.masterMuted : DEFAULT_MASTER_MUTED,
       language: isLanguageCode(parsed.language) ? parsed.language : DEFAULT_LANGUAGE,
+      nickname: sanitizeNickname(parsed.nickname),
     };
   } catch {
     return createDefaultSettings();
