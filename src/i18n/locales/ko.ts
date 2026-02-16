@@ -55,6 +55,9 @@ const ko: Record<string, string> = {
   "hud.thighCm": "허벅지 둘레 {thigh}cm",
   "hud.stage": "스테이지 {stage}",
   "hud.actions": "남은 행동 {actions}/3",
+  "turn.morning": "아침",
+  "turn.noon": "점심",
+  "turn.evening": "저녁",
 
   // In-game action buttons (bottom panel)
   "game.action.work": "일하기",

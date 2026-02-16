@@ -12,6 +12,7 @@ import { formatNumber, getLanguage, onLanguageChange, setLanguage, t } from "../
 import { YuukaRenderer } from "../render/yuukaRenderer";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
+import { UiAnimController } from "./anim/uiAnimController";
 
 type ScreenId = "lobby" | "game" | "score" | "leaderboard";
 
@@ -58,7 +59,12 @@ interface UiRefs {
   hudStress: HTMLElement;
   hudThigh: HTMLElement;
   hudStage: HTMLElement;
-  hudActions: HTMLElement;
+  hudSlotMorning: HTMLElement;
+  hudSlotNoon: HTMLElement;
+  hudSlotEvening: HTMLElement;
+  hudSlotMorningLabel: HTMLElement;
+  hudSlotNoonLabel: HTMLElement;
+  hudSlotEveningLabel: HTMLElement;
   logs: HTMLUListElement;
   endingTitle: HTMLElement;
   endingDesc: HTMLElement;
@@ -138,6 +144,9 @@ function createRunId(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+const TURN_SLOT_KEYS = ["morning", "noon", "evening"] as const;
+const ACTION_INPUT_COOLDOWN_MS = 300;
+
 export class UiController {
   private readonly root: HTMLElement;
   private readonly refs: UiRefs;
@@ -154,6 +163,9 @@ export class UiController {
   private leaderboardItems: LeaderboardItem[] = [];
   private leaderboardLoading = false;
   private leaderboardError: string | null = null;
+  private uiAnimController!: UiAnimController;
+  private renderedRawLogs: string[] = [];
+  private readonly creditNumberFormatter = new Intl.NumberFormat("ko-KR");
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -162,11 +174,12 @@ export class UiController {
     this.save = ensureValidOngoingState(loadSaveData());
     this.state = this.save.state;
     this.settings = loadSettings();
+    this.initUiAnimators();
 
     this.applyLabels();
     this.bindEvents();
     this.syncSettingsUi();
-    this.renderGameUi();
+    this.renderGameUi(true);
     this.renderLeaderboard();
     this.showScreen("lobby");
     onLanguageChange(() => this.handleLanguageChanged());
@@ -201,22 +214,45 @@ export class UiController {
         </section>
 
         <section id="screen-game" class="screen">
-          <div class="skin-panel hud-grid">
-            <span id="hud-day"></span>
-            <span id="hud-credits"></span>
-            <span id="hud-stress"></span>
-            <span id="hud-thigh"></span>
-            <span id="hud-stage" class="hud-accent"></span>
-            <span id="hud-actions"></span>
-            <button id="btn-mini-lobby" class="mini-hud-button font-title" type="button">L</button>
-            <button id="btn-mini-sound" class="mini-hud-button font-title" type="button">S</button>
-          </div>
+          <div class="skin-panel game-main-card">
+            <div class="game-hud-header">
+              <div class="hud-mini-buttons">
+                <button id="btn-mini-lobby" class="mini-hud-button font-title" type="button">L</button>
+                <button id="btn-mini-sound" class="mini-hud-button font-title" type="button">S</button>
+              </div>
+              <div class="hud-row">
+                <span id="hud-day" class="hud-item"></span>
+                <span id="hud-credits" class="hud-item hud-item--right"></span>
+              </div>
+              <div class="hud-row">
+                <span id="hud-stress" class="hud-item hud-item--stress"></span>
+                <span id="hud-thigh" class="hud-item hud-item--right"></span>
+              </div>
+              <div class="game-hud-footer">
+                <div class="hud-slots">
+                  <span id="hud-slot-morning" class="hud-chip">
+                    <span class="hud-chip-icon">☀</span>
+                    <span id="hud-slot-morning-label"></span>
+                  </span>
+                  <span id="hud-slot-noon" class="hud-chip">
+                    <span class="hud-chip-icon">🍱</span>
+                    <span id="hud-slot-noon-label"></span>
+                  </span>
+                  <span id="hud-slot-evening" class="hud-chip">
+                    <span class="hud-chip-icon">🌙</span>
+                    <span id="hud-slot-evening-label"></span>
+                  </span>
+                </div>
+                <span id="hud-stage" class="hud-stage-badge"></span>
+              </div>
+            </div>
 
-          <div id="render-host" class="skin-panel render-host"></div>
+            <div id="render-host" class="render-host"></div>
 
-          <div class="skin-panel log-panel">
-            <h2 id="log-title" class="font-title"></h2>
-            <ul id="log-list"></ul>
+            <div class="game-log-panel">
+              <h2 id="log-title" class="font-title"></h2>
+              <ul id="log-list"></ul>
+            </div>
           </div>
 
           <div class="game-controls">
@@ -413,7 +449,12 @@ export class UiController {
       hudStress: pick("hud-stress"),
       hudThigh: pick("hud-thigh"),
       hudStage: pick("hud-stage"),
-      hudActions: pick("hud-actions"),
+      hudSlotMorning: pick("hud-slot-morning"),
+      hudSlotNoon: pick("hud-slot-noon"),
+      hudSlotEvening: pick("hud-slot-evening"),
+      hudSlotMorningLabel: pick("hud-slot-morning-label"),
+      hudSlotNoonLabel: pick("hud-slot-noon-label"),
+      hudSlotEveningLabel: pick("hud-slot-evening-label"),
       logs: pick("log-list"),
       endingTitle: pick("ending-title"),
       endingDesc: pick("ending-desc"),
@@ -445,6 +486,39 @@ export class UiController {
     };
   }
 
+  private initUiAnimators(): void {
+    this.uiAnimController = new UiAnimController({
+      counters: {
+        credits: {
+          initialValue: this.state.money,
+          onWrite: (value) => {
+            this.refs.hudCredits.textContent = t("hud.credits", {
+              credits: this.creditNumberFormatter.format(value),
+            });
+          },
+        },
+        stress: {
+          initialValue: this.state.stress,
+          onWrite: (value) => {
+            this.refs.hudStress.textContent = t("hud.stress", { stress: value });
+          },
+        },
+        thigh: {
+          initialValue: Math.round(this.state.thighCm),
+          onWrite: (value) => {
+            this.refs.hudThigh.textContent = t("hud.thighCm", { thigh: value });
+          },
+        },
+      },
+      charsPerSecond: 60,
+      onLogLineFinished: () => this.scrollLogsToBottom(),
+    });
+  }
+
+  private refreshHudCountersText(): void {
+    this.uiAnimController.syncCounterText();
+  }
+
   private applyLabels(): void {
     this.setText("lobby-title", t("app.title"));
     this.setText("lobby-version", t("lobby.version", { version: APP_VERSION }));
@@ -460,6 +534,9 @@ export class UiController {
     this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
     this.refs.btnCredits.textContent = t("lobby.btnCredits");
     this.refs.btnGuide.textContent = t("lobby.btnGuide");
+    this.refs.hudSlotMorningLabel.textContent = t("turn.morning");
+    this.refs.hudSlotNoonLabel.textContent = t("turn.noon");
+    this.refs.hudSlotEveningLabel.textContent = t("turn.evening");
     this.refs.btnWork.textContent = t("game.action.work");
     this.refs.btnEat.textContent = t("game.action.eat");
     this.refs.btnGuest.textContent = t("game.action.guest");
@@ -516,6 +593,7 @@ export class UiController {
     this.setText("leader-col-days", t("leaderboard.col.days"));
     this.setText("leader-col-submitted", t("leaderboard.col.submitted"));
     this.setText("log-title", t("log.title"));
+    this.refreshHudCountersText();
     this.updateSoundToggleUi();
     this.updateScoreMeta();
     this.renderLeaderboard();
@@ -572,9 +650,9 @@ export class UiController {
         this.applyNickname();
       }
     });
-    this.refs.btnWork.addEventListener("click", () => this.handleStep(applyWork(this.state)));
-    this.refs.btnEat.addEventListener("click", () => this.handleStep(applyEat(this.state)));
-    this.refs.btnGuest.addEventListener("click", () => this.handleStep(applyGuest(this.state, defaultRng)));
+    this.refs.btnWork.addEventListener("click", () => this.handleActionClick(() => applyWork(this.state)));
+    this.refs.btnEat.addEventListener("click", () => this.handleActionClick(() => applyEat(this.state)));
+    this.refs.btnGuest.addEventListener("click", () => this.handleActionClick(() => applyGuest(this.state, defaultRng)));
     this.refs.btnContinue.addEventListener("click", () => {
       this.toggleEnding(false);
       this.showScreen("score");
@@ -624,6 +702,7 @@ export class UiController {
         this.openGuideModal(false);
       }
     });
+
   }
 
   private syncSettingsUi(): void {
@@ -656,7 +735,7 @@ export class UiController {
     this.openAbandonConfirm(false);
     this.ensureRenderer();
     this.renderer?.updateAudioSettings(this.settings);
-    this.renderGameUi();
+    this.renderGameUi(true);
     this.toggleEnding(false);
   }
 
@@ -665,6 +744,7 @@ export class UiController {
   }
 
   private resetForNewRun(): void {
+    this.uiAnimController.forceFinalizeAll("reset");
     this.state = createInitialState();
     this.latestResult = null;
     this.uploadedMeta = null;
@@ -756,6 +836,14 @@ export class UiController {
     this.renderer = new YuukaRenderer("render-host", this.settings);
   }
 
+  private handleActionClick(runAction: () => StepResult): void {
+    const shouldStartCooldown = this.uiAnimController.onActionUserInput();
+    this.handleStep(runAction());
+    if (shouldStartCooldown) {
+      this.uiAnimController.setCooldown(ACTION_INPUT_COOLDOWN_MS);
+    }
+  }
+
   private handleStep(result: StepResult): void {
     if (this.activeScreen !== "game") return;
     this.state = result.state;
@@ -800,29 +888,69 @@ export class UiController {
     this.refs.btnGuest.disabled = open;
   }
 
-  private renderGameUi(): void {
+  private renderGameUi(forceLogRefresh = false): void {
     const stage = getStage(this.state.thighCm);
 
     this.refs.hudDay.textContent = t("hud.day", { day: this.state.day });
-    this.refs.hudCredits.textContent = t("hud.credits", { credits: formatNumber(this.state.money) });
-    this.refs.hudStress.textContent = t("hud.stress", { stress: this.state.stress });
-    this.refs.hudThigh.textContent = t("hud.thighCm", { thigh: Math.round(this.state.thighCm) });
     this.refs.hudStage.textContent = t("hud.stage", { stage });
-    this.refs.hudActions.textContent = t("hud.actions", {
-      actions: this.state.actionsRemaining,
-    });
+    this.uiAnimController.setCounterTarget("credits", Math.round(this.state.money));
+    this.uiAnimController.setCounterTarget("stress", Math.round(this.state.stress));
+    this.uiAnimController.setCounterTarget("thigh", Math.round(this.state.thighCm));
+    this.updateActionSlots(this.state.actionsRemaining);
+    this.updateStressDangerState(this.state.stress, this.state.stress100Days);
 
     this.refs.btnWork.disabled = this.state.actionsRemaining <= 0;
     this.refs.btnEat.disabled = this.state.actionsRemaining <= 0;
     this.refs.btnGuest.disabled = this.state.actionsRemaining <= 0;
 
-    this.renderLogs();
+    this.renderLogs(forceLogRefresh);
     this.renderer?.render(this.state);
   }
 
-  private renderLogs(): void {
-    this.refs.logs.innerHTML = "";
-    if (this.state.logs.length === 0) {
+  private updateActionSlots(actionsRemaining: number): void {
+    const usedCount = Math.max(0, Math.min(TURN_SLOT_KEYS.length, TURN_SLOT_KEYS.length - actionsRemaining));
+    const slots = [this.refs.hudSlotMorning, this.refs.hudSlotNoon, this.refs.hudSlotEvening];
+    for (let i = 0; i < slots.length; i += 1) {
+      const isUsed = i < usedCount;
+      const isActive = i === usedCount && usedCount < slots.length;
+      slots[i].classList.toggle("hud-chip--used", isUsed);
+      slots[i].classList.toggle("hud-chip--active", isActive);
+    }
+  }
+
+  private updateStressDangerState(stress: number, stress100Days: number): void {
+    const target = this.refs.hudStress;
+    if (stress < 100) {
+      target.classList.remove("hud-stress--danger", "hud-stress--critical", "hud-stress--critical-max");
+      target.style.removeProperty("--stress-danger-color");
+      target.style.removeProperty("--stress-danger-shadow-alpha");
+      target.style.removeProperty("--stress-danger-shake");
+      return;
+    }
+
+    const ratio = Math.max(0, Math.min(1, stress100Days / 10));
+    const red = Math.round(48 + 182 * ratio);
+    const green = Math.round(36 - 24 * ratio);
+    const blue = Math.round(48 - 24 * ratio);
+    const shadowAlpha = (0.08 + ratio * 0.42).toFixed(3);
+    const shakePx = (0.4 + ratio * 1.2).toFixed(2);
+
+    target.classList.add("hud-stress--danger");
+    target.classList.toggle("hud-stress--critical", stress100Days >= 7);
+    target.classList.toggle("hud-stress--critical-max", stress100Days >= 9);
+    target.style.setProperty("--stress-danger-color", `rgb(${red}, ${green}, ${blue})`);
+    target.style.setProperty("--stress-danger-shadow-alpha", shadowAlpha);
+    target.style.setProperty("--stress-danger-shake", `${shakePx}px`);
+  }
+
+  private renderLogs(forceRefresh = false): void {
+    const logs = this.state.logs;
+    const cooldownActive = this.uiAnimController.isCooldownActive();
+
+    if (logs.length === 0) {
+      this.uiAnimController.clearLogTypewriter();
+      this.renderedRawLogs = [];
+      this.refs.logs.innerHTML = "";
       const empty = document.createElement("li");
       empty.className = "log-empty";
       empty.textContent = t("log.empty");
@@ -831,13 +959,48 @@ export class UiController {
       return;
     }
 
-    for (const line of this.state.logs) {
-      const item = document.createElement("li");
-      item.className = "log-line";
-      item.textContent = this.formatLogLine(line);
-      this.refs.logs.append(item);
+    const canAppendOnly =
+      !forceRefresh &&
+      logs.length >= this.renderedRawLogs.length &&
+      this.renderedRawLogs.every((value, index) => value === logs[index]);
+
+    if (!canAppendOnly) {
+      this.uiAnimController.clearLogTypewriter();
+      this.refs.logs.innerHTML = "";
+      for (const line of logs) {
+        const item = document.createElement("li");
+        item.className = "log-line";
+        item.textContent = this.formatLogLine(line);
+        this.refs.logs.append(item);
+      }
+      this.renderedRawLogs = logs.slice();
+      this.scrollLogsToBottom();
+      return;
     }
 
+    if (logs.length === this.renderedRawLogs.length) {
+      return;
+    }
+
+    this.uiAnimController.finalizeCurrentLogLine();
+    if (this.refs.logs.querySelector(".log-empty")) {
+      this.refs.logs.innerHTML = "";
+    }
+
+    const appended = logs.slice(this.renderedRawLogs.length);
+    for (const line of appended) {
+      const item = document.createElement("li");
+      item.className = "log-line";
+      this.refs.logs.append(item);
+      const text = this.formatLogLine(line);
+      if (cooldownActive) {
+        item.textContent = text;
+      } else {
+        item.textContent = "";
+        this.uiAnimController.appendLogLine(item, text);
+      }
+    }
+    this.renderedRawLogs = logs.slice();
     this.scrollLogsToBottom();
   }
 

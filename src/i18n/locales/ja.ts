@@ -55,6 +55,9 @@ const ja: Record<string, string> = {
   "hud.thighCm": "太もも周囲 {thigh}cm",
   "hud.stage": "ステージ {stage}",
   "hud.actions": "残り行動 {actions}/3",
+  "turn.morning": "朝",
+  "turn.noon": "昼",
+  "turn.evening": "夜",
 
   // In-game action buttons (bottom panel)
   "game.action.work": "働く",

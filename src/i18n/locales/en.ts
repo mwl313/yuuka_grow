@@ -55,6 +55,9 @@ const en: Record<string, string> = {
   "hud.thighCm": "Thigh Circumference {thigh}cm",
   "hud.stage": "Stage {stage}",
   "hud.actions": "Actions Left {actions}/3",
+  "turn.morning": "Morning",
+  "turn.noon": "Noon",
+  "turn.evening": "Evening",
 
   // In-game action buttons (bottom panel)
   "game.action.work": "Work",
