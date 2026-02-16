@@ -8,6 +8,7 @@ interface AppEnv {
 }
 
 interface SubmitPayload {
+	runId?: unknown;
 	nickname?: unknown;
 	endingCategory?: unknown;
 	endingId?: unknown;
@@ -20,6 +21,8 @@ interface SubmitPayload {
 }
 
 interface RunRecord {
+	share_id?: string;
+	run_id?: string | null;
 	nickname: string;
 	ending_category: string;
 	ending_id: string;
@@ -40,6 +43,7 @@ interface RankOutput {
 const CORS_METHODS = "GET, POST, OPTIONS";
 const CORS_HEADERS = "Content-Type";
 const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special"]);
+let runIdSchemaEnsured = false;
 
 function escapeHtml(input: string): string {
 	return input
@@ -128,6 +132,26 @@ function normalizeEndingId(value: unknown): string {
 	return (trimmed.length > 0 ? trimmed : "unknown").slice(0, 64);
 }
 
+function normalizeRunId(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	const safe = trimmed.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+	return safe.length > 0 ? safe : null;
+}
+
+async function ensureRunIdSchema(db: D1Database): Promise<void> {
+	if (runIdSchemaEnsured) return;
+
+	try {
+		await db.prepare("ALTER TABLE runs ADD COLUMN run_id TEXT").run();
+	} catch {
+		// Column already exists on upgraded environments.
+	}
+	await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_run_id_unique ON runs(run_id) WHERE run_id IS NOT NULL").run();
+	runIdSchemaEnsured = true;
+}
+
 async function scalarNumber(db: D1Database, sql: string, bindings: unknown[] = []): Promise<number> {
 	const row = await db.prepare(sql).bind(...bindings).first<{ value: number | string }>();
 	if (!row) return 0;
@@ -145,13 +169,14 @@ async function computeRank(
 	return {
 		rank,
 		total,
-		percentileTop: computeRankPercentile(rank, total),
+		percentileTop: computeRankPercentile(higher, total),
 	};
 }
 
 async function insertRunAndGetShareId(
 	db: D1Database,
 	params: {
+		runId: string | null;
 		nickname: string;
 		endingCategory: EndingCategory;
 		endingId: string;
@@ -167,6 +192,7 @@ async function insertRunAndGetShareId(
 	const sql = `
 		INSERT INTO runs (
 			share_id,
+			run_id,
 			nickname,
 			ending_category,
 			ending_id,
@@ -178,7 +204,7 @@ async function insertRunAndGetShareId(
 			submitted_at_server,
 			client_version
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`;
 
 	for (let i = 0; i < 6; i += 1) {
@@ -188,6 +214,7 @@ async function insertRunAndGetShareId(
 				.prepare(sql)
 				.bind(
 					shareId,
+					params.runId,
 					params.nickname,
 					params.endingCategory,
 					params.endingId,
@@ -203,7 +230,11 @@ async function insertRunAndGetShareId(
 			return shareId;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			if (message.toLowerCase().includes("unique") || message.toLowerCase().includes("constraint")) {
+			const lower = message.toLowerCase();
+			if (lower.includes("runs.run_id")) {
+				throw new Error("duplicate_run_id");
+			}
+			if (lower.includes("unique") || lower.includes("constraint")) {
 				continue;
 			}
 			throw error;
@@ -212,7 +243,34 @@ async function insertRunAndGetShareId(
 	throw new Error("Failed to generate unique share id");
 }
 
+async function findRunByRunId(db: D1Database, runId: string): Promise<RunRecord | null> {
+	return (
+		(await db
+			.prepare(
+				`SELECT
+					share_id,
+					run_id,
+					nickname,
+					ending_category,
+					ending_id,
+					survival_days,
+					final_credits,
+					final_thigh_cm,
+					final_stage,
+					submitted_at_client,
+					submitted_at_server
+				FROM runs
+				WHERE run_id = ?
+				LIMIT 1`,
+			)
+			.bind(runId)
+			.first<RunRecord>()) ?? null
+	);
+}
+
 async function handleSubmit(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureRunIdSchema(env.DB);
+
 	let payload: SubmitPayload;
 	try {
 		payload = (await request.json()) as SubmitPayload;
@@ -226,6 +284,7 @@ async function handleSubmit(request: Request, env: AppEnv, origin: string | null
 	}
 
 	const submittedAtServer = new Date().toISOString();
+	const runId = normalizeRunId(payload.runId);
 	const nickname = sanitizeNickname(payload.nickname);
 	const endingId = normalizeEndingId(payload.endingId);
 	const survivalDays = toNonNegativeInt(payload.survivalDays);
@@ -235,29 +294,81 @@ async function handleSubmit(request: Request, env: AppEnv, origin: string | null
 	const submittedAtClient = normalizeSubmittedAtClient(payload.submittedAtClient, submittedAtServer);
 	const clientVersion = normalizeClientVersion(payload.clientVersion);
 
-	const shareId = await insertRunAndGetShareId(env.DB, {
-		nickname,
-		endingCategory: endingCategoryRaw as EndingCategory,
-		endingId,
-		survivalDays,
-		finalCredits,
-		finalThighCm,
-		finalStage,
-		submittedAtClient,
-		submittedAtServer,
-		clientVersion,
-	});
+	let persistedCredits = finalCredits;
+	let persistedThigh = finalThighCm;
+	let resolvedShareId: string;
+	let resolvedSubmittedAtServer: string;
+
+	if (runId) {
+		const existing = await findRunByRunId(env.DB, runId);
+		if (existing) {
+			resolvedShareId = existing.share_id ?? "";
+			resolvedSubmittedAtServer = existing.submitted_at_server;
+			if (!resolvedShareId) {
+				return jsonResponse({ ok: false, error: "Invalid existing run" }, 500, origin);
+			}
+			persistedCredits = existing.final_credits;
+			persistedThigh = existing.final_thigh_cm;
+
+			const [credit, thigh] = await Promise.all([
+				computeRank(env.DB, "final_credits", persistedCredits),
+				computeRank(env.DB, "final_thigh_cm", persistedThigh),
+			]);
+
+			return jsonResponse(
+				{
+					ok: true,
+					shareId: resolvedShareId,
+					submittedAtServer: resolvedSubmittedAtServer,
+					rank: { credit, thigh },
+				},
+				200,
+				origin,
+			);
+		}
+	}
+
+	try {
+		resolvedShareId = await insertRunAndGetShareId(env.DB, {
+			runId,
+			nickname,
+			endingCategory: endingCategoryRaw as EndingCategory,
+			endingId,
+			survivalDays,
+			finalCredits,
+			finalThighCm,
+			finalStage,
+			submittedAtClient,
+			submittedAtServer,
+			clientVersion,
+		});
+		resolvedSubmittedAtServer = submittedAtServer;
+	} catch (error) {
+		if (error instanceof Error && error.message === "duplicate_run_id" && runId) {
+			const existing = await findRunByRunId(env.DB, runId);
+			if (existing?.share_id) {
+				resolvedShareId = existing.share_id;
+				resolvedSubmittedAtServer = existing.submitted_at_server;
+				persistedCredits = existing.final_credits;
+				persistedThigh = existing.final_thigh_cm;
+			} else {
+				throw error;
+			}
+		} else {
+			throw error;
+		}
+	}
 
 	const [credit, thigh] = await Promise.all([
-		computeRank(env.DB, "final_credits", finalCredits),
-		computeRank(env.DB, "final_thigh_cm", finalThighCm),
+		computeRank(env.DB, "final_credits", persistedCredits),
+		computeRank(env.DB, "final_thigh_cm", persistedThigh),
 	]);
 
 	return jsonResponse(
 		{
 			ok: true,
-			shareId,
-			submittedAtServer,
+			shareId: resolvedShareId,
+			submittedAtServer: resolvedSubmittedAtServer,
 			rank: { credit, thigh },
 		},
 		200,

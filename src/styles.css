@@ -344,6 +344,23 @@ textarea {
   text-align: center;
 }
 
+.upload-result-card {
+  position: relative;
+}
+
+.upload-result-close {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
 #confirm-text {
   margin: 0 0 12px;
 }

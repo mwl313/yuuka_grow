@@ -2,6 +2,7 @@ export type LeaderboardSort = "credit" | "thigh";
 export type EndingCategory = "normal" | "bankrupt" | "stress" | "special";
 
 export interface SubmitRunPayload {
+  runId: string;
   nickname: string;
   endingCategory: EndingCategory;
   endingId: string;
@@ -14,9 +15,9 @@ export interface SubmitRunPayload {
 }
 
 export interface RankEntry {
-  rank: number;
-  total: number;
-  percentileTop: number;
+  rank: number | null;
+  total: number | null;
+  percentileTop: number | null;
 }
 
 export interface SubmitRunResponse {

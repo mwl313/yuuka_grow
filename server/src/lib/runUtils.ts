@@ -20,10 +20,10 @@ export function generateShareId(): string {
 	return out;
 }
 
-export function computeRankPercentile(rank: number, total: number): number {
+export function computeRankPercentile(higherCount: number, total: number): number {
 	if (total <= 0) return 0;
-	const raw = 100 * (1 - (rank - 1) / total);
-	return Math.max(0, Math.min(100, Number(raw.toFixed(2))));
+	const raw = Math.floor((Math.max(0, higherCount) / total) * 100);
+	return Math.max(0, Math.min(100, raw));
 }
 
 export function toNonNegativeInt(value: unknown, fallback = 0): number {

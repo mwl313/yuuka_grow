@@ -37,8 +37,11 @@ interface UiRefs {
   btnContinue: HTMLButtonElement;
   btnRetry: HTMLButtonElement;
   btnBack: HTMLButtonElement;
-  btnUpload: HTMLButtonElement;
-  btnShare: HTMLButtonElement;
+  btnUploadShare: HTMLButtonElement;
+  uploadResultOverlay: HTMLElement;
+  btnUploadResultClose: HTMLButtonElement;
+  btnUploadResultShare: HTMLButtonElement;
+  btnUploadResultLobby: HTMLButtonElement;
   btnLeaderSortCredit: HTMLButtonElement;
   btnLeaderSortThigh: HTMLButtonElement;
   btnLeaderBack: HTMLButtonElement;
@@ -60,6 +63,8 @@ interface UiRefs {
   scoreStress: HTMLElement;
   scoreRankCredit: HTMLElement;
   scoreRankThigh: HTMLElement;
+  scoreRankCreditPopup: HTMLElement;
+  scoreRankThighPopup: HTMLElement;
   scoreUploadStatus: HTMLElement;
   lobbyNickname: HTMLElement;
   leaderboardStatus: HTMLElement;
@@ -73,6 +78,7 @@ interface UiRefs {
   confirmText: HTMLElement;
   btnConfirmYes: HTMLButtonElement;
   btnConfirmNo: HTMLButtonElement;
+  uploadResultTitle: HTMLElement;
 }
 
 function wireButtonState(button: HTMLButtonElement): void {
@@ -106,11 +112,22 @@ function sanitizeNickname(raw: string): string {
 }
 
 function formatRankLine(entry: RankEntry): { percent: string; rank: string; total: string } {
+  const percent = Number.isFinite(entry.percentileTop ?? NaN) ? Number(entry.percentileTop).toFixed(1) : "?";
+  const rank = Number.isFinite(entry.rank ?? NaN) ? formatNumber(Number(entry.rank)) : "?";
+  const total = Number.isFinite(entry.total ?? NaN) ? formatNumber(Number(entry.total)) : "?";
   return {
-    percent: entry.percentileTop.toFixed(1),
-    rank: formatNumber(entry.rank),
-    total: formatNumber(entry.total),
+    percent,
+    rank,
+    total,
   };
+}
+
+function createRunId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export class UiController {
@@ -122,6 +139,7 @@ export class UiController {
   private settings: Settings;
   private latestResult: RunResult | null = null;
   private uploadedMeta: UploadedMeta | null = null;
+  private currentRunId = createRunId();
   private activeScreen: ScreenId = "lobby";
   private isUploading = false;
   private leaderboardSort: LeaderboardSort = "credit";
@@ -212,8 +230,7 @@ export class UiController {
             <div class="stack-buttons">
               <button id="btn-retry" class="skin-button font-title"></button>
               <button id="btn-back" class="skin-button font-title"></button>
-              <button id="btn-upload" class="skin-button font-title"></button>
-              <button id="btn-share" class="skin-button font-title"></button>
+              <button id="btn-upload-share" class="skin-button font-title"></button>
             </div>
           </div>
         </section>
@@ -303,6 +320,19 @@ export class UiController {
             </div>
           </div>
         </div>
+
+        <div id="upload-result-overlay" class="overlay hidden">
+          <div class="skin-panel modal-card confirm-card upload-result-card">
+            <button id="btn-upload-result-close" class="upload-result-close" type="button">X</button>
+            <h2 id="upload-result-title" class="font-title"></h2>
+            <p id="score-rank-credit-popup" class="score-rank-line"></p>
+            <p id="score-rank-thigh-popup" class="score-rank-line"></p>
+            <div class="confirm-actions">
+              <button id="btn-upload-result-share" class="skin-button font-title"></button>
+              <button id="btn-upload-result-lobby" class="skin-button font-title"></button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -336,8 +366,11 @@ export class UiController {
       btnContinue: pick("btn-continue"),
       btnRetry: pick("btn-retry"),
       btnBack: pick("btn-back"),
-      btnUpload: pick("btn-upload"),
-      btnShare: pick("btn-share"),
+      btnUploadShare: pick("btn-upload-share"),
+      uploadResultOverlay: pick("upload-result-overlay"),
+      btnUploadResultClose: pick("btn-upload-result-close"),
+      btnUploadResultShare: pick("btn-upload-result-share"),
+      btnUploadResultLobby: pick("btn-upload-result-lobby"),
       btnLeaderSortCredit: pick("btn-leader-sort-credit"),
       btnLeaderSortThigh: pick("btn-leader-sort-thigh"),
       btnLeaderBack: pick("btn-leader-back"),
@@ -359,6 +392,8 @@ export class UiController {
       scoreStress: pick("score-stress"),
       scoreRankCredit: pick("score-rank-credit"),
       scoreRankThigh: pick("score-rank-thigh"),
+      scoreRankCreditPopup: pick("score-rank-credit-popup"),
+      scoreRankThighPopup: pick("score-rank-thigh-popup"),
       scoreUploadStatus: pick("score-upload-status"),
       lobbyNickname: pick("lobby-nickname"),
       leaderboardStatus: pick("leaderboard-status"),
@@ -372,6 +407,7 @@ export class UiController {
       confirmText: pick("confirm-text"),
       btnConfirmYes: pick("btn-confirm-yes"),
       btnConfirmNo: pick("btn-confirm-no"),
+      uploadResultTitle: pick("upload-result-title"),
     };
   }
 
@@ -393,9 +429,15 @@ export class UiController {
     this.refs.btnContinue.textContent = t("ending.continue");
     this.refs.btnRetry.textContent = t("score.btnRetry");
     this.refs.btnBack.textContent = t("score.btnBack");
-    this.refs.btnUpload.textContent = this.isUploading ? t("score.uploading") : t("score.btnUpload");
-    this.refs.btnShare.textContent = t("result.share");
+    this.refs.btnUploadShare.textContent = this.isUploading
+      ? t("score.uploading")
+      : this.uploadedMeta
+        ? t("score.btnUploadedView")
+        : t("score.btnUploadShare");
     this.refs.btnCloseSettings.textContent = t("settings.close");
+    this.refs.uploadResultTitle.textContent = t("score.uploadCompleteTitle");
+    this.refs.btnUploadResultShare.textContent = t("score.popupShare");
+    this.refs.btnUploadResultLobby.textContent = t("score.popupLobby");
     this.refs.btnLeaderSortCredit.textContent = t("leaderboard.sort.credit");
     this.refs.btnLeaderSortThigh.textContent = t("leaderboard.sort.thigh");
     this.refs.btnLeaderBack.textContent = t("leaderboard.back");
@@ -451,8 +493,10 @@ export class UiController {
       this.refs.btnContinue,
       this.refs.btnRetry,
       this.refs.btnBack,
-      this.refs.btnUpload,
-      this.refs.btnShare,
+      this.refs.btnUploadShare,
+      this.refs.btnUploadResultClose,
+      this.refs.btnUploadResultShare,
+      this.refs.btnUploadResultLobby,
       this.refs.btnLeaderSortCredit,
       this.refs.btnLeaderSortThigh,
       this.refs.btnLeaderBack,
@@ -487,10 +531,15 @@ export class UiController {
     });
     this.refs.btnRetry.addEventListener("click", () => this.retryGame());
     this.refs.btnBack.addEventListener("click", () => this.showScreen("lobby"));
-    this.refs.btnUpload.addEventListener("click", () => {
-      void this.uploadResult();
+    this.refs.btnUploadShare.addEventListener("click", () => {
+      void this.handleUploadShareClick();
     });
-    this.refs.btnShare.addEventListener("click", () => {
+    this.refs.btnUploadResultClose.addEventListener("click", () => this.openUploadResultPopup(false));
+    this.refs.btnUploadResultLobby.addEventListener("click", () => {
+      this.openUploadResultPopup(false);
+      this.showScreen("lobby");
+    });
+    this.refs.btnUploadResultShare.addEventListener("click", () => {
       void this.shareResult();
     });
     this.refs.btnLeaderSortCredit.addEventListener("click", () => {
@@ -509,6 +558,11 @@ export class UiController {
     this.refs.sfxRange.addEventListener("input", () => this.updateSettingsFromInputs());
     this.refs.voiceRange.addEventListener("input", () => this.updateSettingsFromInputs());
     this.refs.languageSelect.addEventListener("change", () => this.updateSettingsFromInputs());
+    this.refs.uploadResultOverlay.addEventListener("click", (event) => {
+      if (event.target === this.refs.uploadResultOverlay) {
+        this.openUploadResultPopup(false);
+      }
+    });
   }
 
   private syncSettingsUi(): void {
@@ -553,7 +607,9 @@ export class UiController {
     this.state = createInitialState();
     this.latestResult = null;
     this.uploadedMeta = null;
+    this.currentRunId = createRunId();
     this.isUploading = false;
+    this.openUploadResultPopup(false);
     this.save = {
       ...this.save,
       state: this.state,
@@ -586,6 +642,10 @@ export class UiController {
 
   private openAbandonConfirm(open: boolean): void {
     this.refs.confirmOverlay.classList.toggle("hidden", !open);
+  }
+
+  private openUploadResultPopup(open: boolean): void {
+    this.refs.uploadResultOverlay.classList.toggle("hidden", !open);
   }
 
   private confirmAbandon(): void {
@@ -650,6 +710,7 @@ export class UiController {
     this.latestResult = runResult;
     this.uploadedMeta = null;
     this.isUploading = false;
+    this.openUploadResultPopup(false);
     this.save = recordRunResult(
       {
         ...this.save,
@@ -774,21 +835,39 @@ export class UiController {
   }
 
   private updateScoreMeta(messageKey?: string): void {
-    this.refs.btnUpload.textContent = this.isUploading ? t("score.uploading") : t("score.btnUpload");
-    this.refs.btnUpload.disabled = this.isUploading || !this.latestResult;
-    this.refs.btnShare.disabled = !this.latestResult;
+    this.refs.btnUploadShare.textContent = this.isUploading
+      ? t("score.uploading")
+      : this.uploadedMeta
+        ? t("score.btnUploadedView")
+        : t("score.btnUploadShare");
+    this.refs.btnUploadShare.disabled = this.isUploading || !this.latestResult;
 
     if (this.uploadedMeta) {
       const credit = formatRankLine(this.uploadedMeta.credit);
       const thigh = formatRankLine(this.uploadedMeta.thigh);
       this.refs.scoreRankCredit.textContent = t("score.rank.credit", credit);
       this.refs.scoreRankThigh.textContent = t("score.rank.thigh", thigh);
+      this.refs.scoreRankCreditPopup.textContent = t("score.rank.credit", credit);
+      this.refs.scoreRankThighPopup.textContent = t("score.rank.thigh", thigh);
     } else {
-      this.refs.scoreRankCredit.textContent = t("score.rank.pending.credit");
-      this.refs.scoreRankThigh.textContent = t("score.rank.pending.thigh");
+      const pendingCredit = t("score.rank.pending.credit");
+      const pendingThigh = t("score.rank.pending.thigh");
+      this.refs.scoreRankCredit.textContent = pendingCredit;
+      this.refs.scoreRankThigh.textContent = pendingThigh;
+      this.refs.scoreRankCreditPopup.textContent = pendingCredit;
+      this.refs.scoreRankThighPopup.textContent = pendingThigh;
     }
 
     this.refs.scoreUploadStatus.textContent = messageKey ? t(messageKey) : "";
+  }
+
+  private async handleUploadShareClick(): Promise<void> {
+    if (!this.latestResult) return;
+    if (this.uploadedMeta) {
+      this.openUploadResultPopup(true);
+      return;
+    }
+    await this.uploadResult();
   }
 
   private async uploadResult(): Promise<void> {
@@ -799,6 +878,7 @@ export class UiController {
 
     try {
       const response = await submitRun({
+        runId: this.currentRunId,
         nickname: this.settings.nickname,
         endingCategory: this.latestResult.endingId,
         endingId: this.latestResult.endingId,
@@ -816,6 +896,7 @@ export class UiController {
         thigh: response.rank.thigh,
       };
       statusKey = "score.upload.success";
+      this.openUploadResultPopup(true);
     } catch (error) {
       console.error(error);
     } finally {
@@ -827,12 +908,18 @@ export class UiController {
   private buildShareText(): string {
     if (!this.latestResult) return t("score.share.text.base");
     if (!this.uploadedMeta) return t("score.share.text.base");
+    const creditTop = Number.isFinite(this.uploadedMeta.credit.percentileTop ?? NaN)
+      ? Number(this.uploadedMeta.credit.percentileTop).toFixed(1)
+      : "?";
+    const thighTop = Number.isFinite(this.uploadedMeta.thigh.percentileTop ?? NaN)
+      ? Number(this.uploadedMeta.thigh.percentileTop).toFixed(1)
+      : "?";
     return t("score.share.text.withRank", {
       nickname: this.settings.nickname,
       credits: formatNumber(this.latestResult.finalMoney),
       thigh: formatNumber(this.latestResult.finalThighCm),
-      creditTop: this.uploadedMeta.credit.percentileTop.toFixed(1),
-      thighTop: this.uploadedMeta.thigh.percentileTop.toFixed(1),
+      creditTop,
+      thighTop,
     });
   }
 
