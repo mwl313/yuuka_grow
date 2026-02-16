@@ -7,10 +7,11 @@ const BLINK_ON_MS = 120;
 const BLINK_OFF_MS = 80;
 const BLINK_REPEAT_COUNT = 2;
 const BLINK_FINAL_ON_MS = 160;
-const HOLD_BEFORE_DIVE_MS = 250;
+const HOLD_BEFORE_DIVE_MS = 280;
 const DIVE_MS = 480;
+const LOGO_PRE_FADE_MS = 120;
 const OVERLAY_FADE_OUT_MS = 150;
-const DIVE_SCALE = 4.4;
+const DIVE_SCALE_FALLBACK = 4.4;
 const PADDING_PX = 24;
 
 const GAMEBOY_W = 694;
@@ -121,7 +122,6 @@ function createBootOverlay(): {
   overlay.style.setProperty("--boot-padding-px", `${PADDING_PX}px`);
   overlay.style.setProperty("--boot-fade-in-ms", `${FADE_IN_MS}ms`);
   overlay.style.setProperty("--boot-dive-ms", `${DIVE_MS}ms`);
-  overlay.style.setProperty("--boot-dive-scale", String(DIVE_SCALE));
 
   const wrap = document.createElement("div");
   wrap.className = "boot-gb-wrap";
@@ -183,14 +183,38 @@ async function waitAnimationDone(animation: Animation): Promise<void> {
 async function runDiveTransition(params: {
   overlay: HTMLDivElement;
   wrap: HTMLDivElement;
+  logoImage: HTMLImageElement;
 }): Promise<void> {
-  const { overlay, wrap } = params;
-  const wrapAnim = wrap.animate([{ transform: "scale(1)" }, { transform: `scale(${DIVE_SCALE})` }], {
+  const { overlay, wrap, logoImage } = params;
+  const overlayRect = overlay.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const logoRect = logoImage.getBoundingClientRect();
+  const originY = wrapRect.top + (wrapRect.height * HOLE_CENTER_Y_PCT) / 100;
+
+  // Solve s from: originY + (logoBottom - originY) * s = overlayBottom
+  const denominator = logoRect.bottom - originY;
+  const computedScale =
+    denominator > 0
+      ? (overlayRect.bottom - originY) / denominator
+      : DIVE_SCALE_FALLBACK;
+  const diveScale =
+    Number.isFinite(computedScale) && computedScale > 1
+      ? computedScale
+      : DIVE_SCALE_FALLBACK;
+
+  const wrapAnim = wrap.animate([{ transform: "scale(1)" }, { transform: `scale(${diveScale})` }], {
     duration: DIVE_MS,
     easing: "cubic-bezier(0.65, 0, 0.9, 0.35)",
     fill: "forwards",
   });
   await waitAnimationDone(wrapAnim);
+
+  const logoFadeAnim = logoImage.animate([{ opacity: 1 }, { opacity: 0 }], {
+    duration: LOGO_PRE_FADE_MS,
+    easing: "ease-out",
+    fill: "forwards",
+  });
+  await waitAnimationDone(logoFadeAnim);
 
   const overlayFadeAnim = overlay.animate([{ opacity: 1 }, { opacity: 0 }], {
     duration: OVERLAY_FADE_OUT_MS,
@@ -228,7 +252,7 @@ async function playBootSequence(): Promise<void> {
     await delay(BLINK_FINAL_ON_MS);
     await delay(HOLD_BEFORE_DIVE_MS);
 
-    await runDiveTransition({ overlay, wrap });
+    await runDiveTransition({ overlay, wrap, logoImage });
   } finally {
     overlay.remove();
   }

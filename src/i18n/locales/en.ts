@@ -8,8 +8,11 @@ const en: Record<string, string> = {
   "lobby.title": "Grow Yuuka (temp)",
   "lobby.btnStart": "Start",
   "lobby.btnSettings": "Options",
+  "lobby.btnSettingsIconLabel": "Settings",
   "lobby.btnNickname": "Nickname (temp)",
   "lobby.btnLeaderboard": "Leaderboard",
+  "lobby.btnCredits": "Credits",
+  "lobby.btnGuide": "Guide",
   "lobby.leaderboardStub": "Leaderboard is coming soon.",
   "lobby.nicknameCurrent": "Nickname: {nickname}",
   "lobby.disclaimer": "This game is an unofficial fan game and is not affiliated with the official IP.",
@@ -39,6 +42,10 @@ const en: Record<string, string> = {
   "nickname.placeholder": "Enter nickname (temp)",
   "nickname.apply": "Apply",
   "nickname.cancel": "Cancel",
+  "credits.title": "Credits",
+  "credits.body": "(temp)",
+  "guide.title": "Guide",
+  "guide.body": "(temp)",
 
   // HUD / resources
   "hud.day": "Day {day}",

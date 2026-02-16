@@ -181,6 +181,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
 }
 
 #lobby-title {
@@ -191,6 +192,60 @@ textarea {
 .stack-buttons {
   display: grid;
   gap: 10px;
+}
+
+.lobby-gear-button {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid var(--button-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-main);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.08s ease, background-color 0.08s ease, opacity 0.08s ease;
+}
+
+.lobby-gear-button:hover {
+  background: var(--button-hover);
+}
+
+.lobby-gear-button:active,
+.lobby-gear-button.pressed {
+  background: var(--button-pressed);
+  transform: translateY(1px);
+}
+
+.lobby-visual {
+  display: grid;
+}
+
+.lobby-menu {
+  display: grid;
+  gap: 10px;
+}
+
+.lobby-primary-button {
+  min-height: 54px;
+}
+
+.lobby-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lobby-secondary-grid .skin-button {
+  min-height: 46px;
 }
 
 .lobby-dance {
@@ -337,6 +392,11 @@ textarea {
 .settings-row input[type="range"],
 .settings-row select {
   min-height: 44px;
+}
+
+.modal-temp-body {
+  margin: 0 0 12px;
+  font-size: 14px;
 }
 
 .confirm-card {

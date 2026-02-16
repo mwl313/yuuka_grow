@@ -22,12 +22,18 @@ interface UiRefs {
   leaderboard: HTMLElement;
   settingsModal: HTMLElement;
   nicknameModal: HTMLElement;
+  creditsModal: HTMLElement;
+  guideModal: HTMLElement;
   endingOverlay: HTMLElement;
   btnStart: HTMLButtonElement;
   btnSettings: HTMLButtonElement;
   btnNickname: HTMLButtonElement;
   btnLeaderboard: HTMLButtonElement;
+  btnCredits: HTMLButtonElement;
+  btnGuide: HTMLButtonElement;
   btnCloseSettings: HTMLButtonElement;
+  btnCloseCredits: HTMLButtonElement;
+  btnCloseGuide: HTMLButtonElement;
   btnNicknameApply: HTMLButtonElement;
   btnNicknameCancel: HTMLButtonElement;
   nicknameInput: HTMLInputElement;
@@ -77,6 +83,10 @@ interface UiRefs {
   btnConfirmYes: HTMLButtonElement;
   btnConfirmNo: HTMLButtonElement;
   uploadResultTitle: HTMLElement;
+  creditsTitle: HTMLElement;
+  creditsBody: HTMLElement;
+  guideTitle: HTMLElement;
+  guideBody: HTMLElement;
 }
 
 function wireButtonState(button: HTMLButtonElement): void {
@@ -168,15 +178,21 @@ export class UiController {
       <div class="app-shell font-plain">
         <section id="screen-lobby" class="screen">
           <div class="skin-panel lobby-card">
+            <button id="btn-settings" class="lobby-gear-button font-title" type="button" aria-label=""></button>
             <h1 id="lobby-title" class="font-title"></h1>
             <p id="lobby-version"></p>
             <p id="lobby-nickname" class="lobby-foot"></p>
-            <div class="stack-buttons">
+            <div class="lobby-visual">
               <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka_dance.gif" alt="" />
-              <button id="btn-start" class="skin-button font-title"></button>
-              <button id="btn-settings" class="skin-button font-title"></button>
-              <button id="btn-nickname" class="skin-button font-title"></button>
-              <button id="btn-leaderboard" class="skin-button font-title"></button>
+            </div>
+            <div class="lobby-menu">
+              <button id="btn-start" class="skin-button font-title lobby-primary-button"></button>
+              <div class="lobby-secondary-grid">
+                <button id="btn-nickname" class="skin-button font-title"></button>
+                <button id="btn-leaderboard" class="skin-button font-title"></button>
+                <button id="btn-credits" class="skin-button font-title"></button>
+                <button id="btn-guide" class="skin-button font-title"></button>
+              </div>
             </div>
             <p id="lobby-disclaimer" class="lobby-disclaimer"></p>
             <p id="lobby-credits" class="lobby-foot"></p>
@@ -305,6 +321,22 @@ export class UiController {
           </div>
         </div>
 
+        <div id="credits-modal" class="overlay hidden">
+          <div class="skin-panel modal-card">
+            <h2 id="credits-title" class="font-title"></h2>
+            <p id="credits-body" class="modal-temp-body"></p>
+            <button id="btn-close-credits" class="skin-button font-title"></button>
+          </div>
+        </div>
+
+        <div id="guide-modal" class="overlay hidden">
+          <div class="skin-panel modal-card">
+            <h2 id="guide-title" class="font-title"></h2>
+            <p id="guide-body" class="modal-temp-body"></p>
+            <button id="btn-close-guide" class="skin-button font-title"></button>
+          </div>
+        </div>
+
         <div id="confirm-overlay" class="overlay hidden">
           <div class="skin-panel modal-card confirm-card">
             <p id="confirm-text"></p>
@@ -345,12 +377,18 @@ export class UiController {
       leaderboard: pick("screen-leaderboard"),
       settingsModal: pick("settings-modal"),
       nicknameModal: pick("nickname-modal"),
+      creditsModal: pick("credits-modal"),
+      guideModal: pick("guide-modal"),
       endingOverlay: pick("ending-overlay"),
       btnStart: pick("btn-start"),
       btnSettings: pick("btn-settings"),
       btnNickname: pick("btn-nickname"),
       btnLeaderboard: pick("btn-leaderboard"),
+      btnCredits: pick("btn-credits"),
+      btnGuide: pick("btn-guide"),
       btnCloseSettings: pick("btn-close-settings"),
+      btnCloseCredits: pick("btn-close-credits"),
+      btnCloseGuide: pick("btn-close-guide"),
       btnNicknameApply: pick("btn-nickname-apply"),
       btnNicknameCancel: pick("btn-nickname-cancel"),
       nicknameInput: pick("nickname-input"),
@@ -400,6 +438,10 @@ export class UiController {
       btnConfirmYes: pick("btn-confirm-yes"),
       btnConfirmNo: pick("btn-confirm-no"),
       uploadResultTitle: pick("upload-result-title"),
+      creditsTitle: pick("credits-title"),
+      creditsBody: pick("credits-body"),
+      guideTitle: pick("guide-title"),
+      guideBody: pick("guide-body"),
     };
   }
 
@@ -412,9 +454,12 @@ export class UiController {
     this.setText("lobby-nickname", t("lobby.nicknameCurrent", { nickname: this.settings.nickname }));
 
     this.refs.btnStart.textContent = t("menu.start");
-    this.refs.btnSettings.textContent = t("menu.options");
+    this.refs.btnSettings.textContent = "⚙";
+    this.refs.btnSettings.setAttribute("aria-label", t("lobby.btnSettingsIconLabel"));
     this.refs.btnNickname.textContent = t("lobby.btnNickname");
     this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
+    this.refs.btnCredits.textContent = t("lobby.btnCredits");
+    this.refs.btnGuide.textContent = t("lobby.btnGuide");
     this.refs.btnWork.textContent = t("game.action.work");
     this.refs.btnEat.textContent = t("game.action.eat");
     this.refs.btnGuest.textContent = t("game.action.guest");
@@ -427,6 +472,8 @@ export class UiController {
         ? t("score.btnUploadedView")
         : t("score.btnUploadShare");
     this.refs.btnCloseSettings.textContent = t("settings.close");
+    this.refs.btnCloseCredits.textContent = t("settings.close");
+    this.refs.btnCloseGuide.textContent = t("settings.close");
     this.refs.uploadResultTitle.textContent = t("score.uploadCompleteTitle");
     this.refs.btnUploadResultShare.textContent = t("score.popupShare");
     this.refs.btnUploadResultLobby.textContent = t("score.popupLobby");
@@ -450,6 +497,10 @@ export class UiController {
     this.refs.nicknameInput.placeholder = t("nickname.placeholder");
     this.refs.btnNicknameApply.textContent = t("nickname.apply");
     this.refs.btnNicknameCancel.textContent = t("nickname.cancel");
+    this.refs.creditsTitle.textContent = t("credits.title");
+    this.refs.creditsBody.textContent = t("credits.body");
+    this.refs.guideTitle.textContent = t("guide.title");
+    this.refs.guideBody.textContent = t("guide.body");
 
     this.setText("score-title", t("result.title"));
     this.setText("score-label-ending", t("result.ending"));
@@ -476,7 +527,11 @@ export class UiController {
       this.refs.btnSettings,
       this.refs.btnNickname,
       this.refs.btnLeaderboard,
+      this.refs.btnCredits,
+      this.refs.btnGuide,
       this.refs.btnCloseSettings,
+      this.refs.btnCloseCredits,
+      this.refs.btnCloseGuide,
       this.refs.btnNicknameApply,
       this.refs.btnNicknameCancel,
       this.refs.btnWork,
@@ -504,7 +559,11 @@ export class UiController {
     this.refs.btnLeaderboard.addEventListener("click", () => {
       void this.openLeaderboard();
     });
+    this.refs.btnCredits.addEventListener("click", () => this.openCreditsModal(true));
+    this.refs.btnGuide.addEventListener("click", () => this.openGuideModal(true));
     this.refs.btnCloseSettings.addEventListener("click", () => this.openSettings(false));
+    this.refs.btnCloseCredits.addEventListener("click", () => this.openCreditsModal(false));
+    this.refs.btnCloseGuide.addEventListener("click", () => this.openGuideModal(false));
     this.refs.btnNicknameApply.addEventListener("click", () => this.applyNickname());
     this.refs.btnNicknameCancel.addEventListener("click", () => this.openNicknameModal(false));
     this.refs.nicknameInput.addEventListener("keydown", (event) => {
@@ -553,6 +612,16 @@ export class UiController {
     this.refs.uploadResultOverlay.addEventListener("click", (event) => {
       if (event.target === this.refs.uploadResultOverlay) {
         this.openUploadResultPopup(false);
+      }
+    });
+    this.refs.creditsModal.addEventListener("click", (event) => {
+      if (event.target === this.refs.creditsModal) {
+        this.openCreditsModal(false);
+      }
+    });
+    this.refs.guideModal.addEventListener("click", (event) => {
+      if (event.target === this.refs.guideModal) {
+        this.openGuideModal(false);
       }
     });
   }
@@ -620,6 +689,14 @@ export class UiController {
       this.refs.nicknameInput.focus();
       this.refs.nicknameInput.select();
     }
+  }
+
+  private openCreditsModal(open: boolean): void {
+    this.refs.creditsModal.classList.toggle("hidden", !open);
+  }
+
+  private openGuideModal(open: boolean): void {
+    this.refs.guideModal.classList.toggle("hidden", !open);
   }
 
   private applyNickname(): void {

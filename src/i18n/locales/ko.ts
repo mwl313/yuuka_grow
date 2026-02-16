@@ -8,8 +8,11 @@ const ko: Record<string, string> = {
   "lobby.title": "유우카 키우기",
   "lobby.btnStart": "게임 시작",
   "lobby.btnSettings": "설정",
+  "lobby.btnSettingsIconLabel": "설정",
   "lobby.btnNickname": "닉네임",
   "lobby.btnLeaderboard": "리더보드",
+  "lobby.btnCredits": "원산지 표기",
+  "lobby.btnGuide": "가이드",
   "lobby.leaderboardStub": "리더보드는 준비 중이다.",
   "lobby.nicknameCurrent": "현재 닉네임: {nickname}",
   "lobby.disclaimer": "본 게임은 비공식 팬게임이며, 원작 및 공식과 무관하다.",
@@ -39,6 +42,10 @@ const ko: Record<string, string> = {
   "nickname.placeholder": "닉네임을 입력해줘",
   "nickname.apply": "적용",
   "nickname.cancel": "취소",
+  "credits.title": "원산지 표기",
+  "credits.body": "(temp)",
+  "guide.title": "가이드",
+  "guide.body": "(temp)",
 
   // HUD / resources
   "hud.day": "{day}일차",

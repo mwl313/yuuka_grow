@@ -8,8 +8,11 @@ const ja: Record<string, string> = {
   "lobby.title": "ユウカ育成 (temp)",
   "lobby.btnStart": "はじめる！",
   "lobby.btnSettings": "オプション",
+  "lobby.btnSettingsIconLabel": "設定",
   "lobby.btnNickname": "ニックネーム(temp)",
   "lobby.btnLeaderboard": "ランキング",
+  "lobby.btnCredits": "クレジット",
+  "lobby.btnGuide": "ガイド",
   "lobby.leaderboardStub": "ランキングは準備中だよ。",
   "lobby.nicknameCurrent": "ニックネーム: {nickname}",
   "lobby.disclaimer": "このゲームは非公式のファンゲームで、公式とは関係ないよ。",
@@ -39,6 +42,10 @@ const ja: Record<string, string> = {
   "nickname.placeholder": "ニックネームを入力してね(temp)",
   "nickname.apply": "適用",
   "nickname.cancel": "キャンセル",
+  "credits.title": "クレジット",
+  "credits.body": "(temp)",
+  "guide.title": "ガイド",
+  "guide.body": "(temp)",
 
   // HUD / resources
   "hud.day": "{day}日目",
