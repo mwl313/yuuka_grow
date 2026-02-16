@@ -1,5 +1,6 @@
 import "./styles.css";
 import { initI18n } from "./i18n";
+import { maybeRunBootThen } from "./ui/boot/bootManager";
 import { UiController } from "./ui/uiController";
 
 const root = document.querySelector<HTMLElement>("#app");
@@ -8,4 +9,6 @@ if (!root) {
 }
 
 initI18n();
-new UiController(root);
+void maybeRunBootThen(() => {
+  new UiController(root);
+});
