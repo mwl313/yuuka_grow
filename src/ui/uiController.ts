@@ -13,6 +13,7 @@ import { YuukaRenderer } from "../render/yuukaRenderer";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
 import { UiAnimController } from "./anim/uiAnimController";
+import { TransitionManager } from "./transition/transitionManager";
 
 type ScreenId = "lobby" | "game" | "score" | "leaderboard";
 
@@ -146,6 +147,7 @@ function createRunId(): string {
 
 const TURN_SLOT_KEYS = ["morning", "noon", "evening"] as const;
 const ACTION_INPUT_COOLDOWN_MS = 300;
+const ENDING_TRANSITION_DELAY_MS = 200;
 
 export class UiController {
   private readonly root: HTMLElement;
@@ -164,6 +166,7 @@ export class UiController {
   private leaderboardLoading = false;
   private leaderboardError: string | null = null;
   private uiAnimController!: UiAnimController;
+  private readonly transitionManager = new TransitionManager();
   private renderedRawLogs: string[] = [];
   private readonly creditNumberFormatter = new Intl.NumberFormat("ko-KR");
 
@@ -654,19 +657,27 @@ export class UiController {
     this.refs.btnEat.addEventListener("click", () => this.handleActionClick(() => applyEat(this.state)));
     this.refs.btnGuest.addEventListener("click", () => this.handleActionClick(() => applyGuest(this.state, defaultRng)));
     this.refs.btnContinue.addEventListener("click", () => {
-      this.toggleEnding(false);
-      this.showScreen("score");
-      this.renderScore();
+      void this.transitionManager.transitionTo("score", {
+        type: "slide",
+        direction: "left",
+        onMid: () => {
+          this.toggleEnding(false);
+          this.showScreen("score");
+          this.renderScore();
+        },
+      });
     });
     this.refs.btnRetry.addEventListener("click", () => this.retryGame());
-    this.refs.btnBack.addEventListener("click", () => this.showScreen("lobby"));
+    this.refs.btnBack.addEventListener("click", () => {
+      void this.transitionToLobby();
+    });
     this.refs.btnUploadShare.addEventListener("click", () => {
       void this.handleUploadShareClick();
     });
     this.refs.btnUploadResultClose.addEventListener("click", () => this.openUploadResultPopup(false));
     this.refs.btnUploadResultLobby.addEventListener("click", () => {
       this.openUploadResultPopup(false);
-      this.showScreen("lobby");
+      void this.transitionToLobby();
     });
     this.refs.btnUploadResultShare.addEventListener("click", () => {
       void this.shareResult();
@@ -677,7 +688,9 @@ export class UiController {
     this.refs.btnLeaderSortThigh.addEventListener("click", () => {
       void this.changeLeaderboardSort("thigh");
     });
-    this.refs.btnLeaderBack.addEventListener("click", () => this.showScreen("lobby"));
+    this.refs.btnLeaderBack.addEventListener("click", () => {
+      void this.transitionToLobby();
+    });
     this.refs.btnMiniLobby.addEventListener("click", () => this.openAbandonConfirm(true));
     this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
     this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
@@ -731,12 +744,16 @@ export class UiController {
 
   private startGame(): void {
     this.resetForNewRun();
-    this.showScreen("game");
     this.openAbandonConfirm(false);
     this.ensureRenderer();
     this.renderer?.updateAudioSettings(this.settings);
     this.renderGameUi(true);
     this.toggleEnding(false);
+    void this.transitionManager.transitionTo("game", {
+      type: "slide",
+      direction: "left",
+      onMid: () => this.showScreen("game"),
+    });
   }
 
   private retryGame(): void {
@@ -801,7 +818,7 @@ export class UiController {
     this.openAbandonConfirm(false);
     this.toggleEnding(false);
     this.resetForNewRun();
-    this.showScreen("lobby");
+    void this.transitionToLobby();
   }
 
   private toggleMasterMute(): void {
@@ -827,7 +844,11 @@ export class UiController {
   }
 
   private async openLeaderboard(): Promise<void> {
-    this.showScreen("leaderboard");
+    await this.transitionManager.transitionTo("leaderboard", {
+      type: "slide",
+      direction: "left",
+      onMid: () => this.showScreen("leaderboard"),
+    });
     await this.loadLeaderboard();
   }
 
@@ -878,7 +899,26 @@ export class UiController {
     saveData(this.save);
     this.refs.endingTitle.textContent = t(`ending.${runResult.endingId}.title`);
     this.refs.endingDesc.textContent = t(`ending.${runResult.endingId}.desc`);
-    this.toggleEnding(true);
+    const preShakeTarget = this.refs.game.querySelector<HTMLElement>(".game-main-card") ?? this.refs.game;
+    void (async () => {
+      await this.transitionManager.playPreShake(preShakeTarget, 260);
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ENDING_TRANSITION_DELAY_MS);
+      });
+      await this.transitionManager.transitionTo("ending", {
+        type: "shutter",
+        freezeFrame: false,
+        onMid: () => this.toggleEnding(true),
+      });
+    })();
+  }
+
+  private transitionToLobby(): Promise<void> {
+    return this.transitionManager.transitionTo("lobby", {
+      type: "slide",
+      direction: "right",
+      onMid: () => this.showScreen("lobby"),
+    });
   }
 
   private toggleEnding(open: boolean): void {
@@ -921,7 +961,7 @@ export class UiController {
   private updateStressDangerState(stress: number, stress100Days: number): void {
     const target = this.refs.hudStress;
     if (stress < 100) {
-      target.classList.remove("hud-stress--danger", "hud-stress--critical", "hud-stress--critical-max");
+      target.classList.remove("hud-stress--danger", "hud-stress--shadow", "hud-stress--critical", "hud-stress--critical-max");
       target.style.removeProperty("--stress-danger-color");
       target.style.removeProperty("--stress-danger-shadow-alpha");
       target.style.removeProperty("--stress-danger-shake");
@@ -935,8 +975,11 @@ export class UiController {
     const shadowAlpha = (0.08 + ratio * 0.42).toFixed(3);
     const shakePx = (0.4 + ratio * 1.2).toFixed(2);
 
+    // Day 1~7 at stress 100: keep color warning only, no shadow/pulse.
+    const shadowEnabled = stress100Days > 7;
     target.classList.add("hud-stress--danger");
-    target.classList.toggle("hud-stress--critical", stress100Days >= 7);
+    target.classList.toggle("hud-stress--shadow", shadowEnabled);
+    target.classList.toggle("hud-stress--critical", stress100Days >= 8);
     target.classList.toggle("hud-stress--critical-max", stress100Days >= 9);
     target.style.setProperty("--stress-danger-color", `rgb(${red}, ${green}, ${blue})`);
     target.style.setProperty("--stress-danger-shadow-alpha", shadowAlpha);

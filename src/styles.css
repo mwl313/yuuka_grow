@@ -435,6 +435,9 @@ textarea {
 
 .hud-stress--danger {
   color: var(--stress-danger-color, #c32626);
+}
+
+.hud-stress--shadow {
   text-shadow:
     0 0 0 rgba(195, 38, 38, 0),
     0 1px 2px rgba(0, 0, 0, 0.55);
@@ -556,6 +559,146 @@ textarea {
 
 .overlay.hidden {
   display: none;
+}
+
+.pre-shake-slow {
+  animation: pre-shake-slow var(--pre-shake-duration, 260ms) ease-in-out;
+  will-change: transform;
+}
+
+@keyframes pre-shake-slow {
+  0% {
+    transform: translate(0, 0);
+  }
+  23% {
+    transform: translate(-3px, 1px);
+  }
+  46% {
+    transform: translate(2px, -2px);
+  }
+  73% {
+    transform: translate(-2px, 2px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+#transition-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#transition-overlay.transition--active {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.transition-slide-panel,
+.transition-shutter-layer,
+.transition-glitch-layer,
+.transition-flash-layer {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+#transition-freeze-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9996;
+  background: #000;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+#transition-overlay.transition--slide .transition-slide-panel {
+  display: block;
+  background: #000 !important;
+  will-change: transform;
+}
+
+.transition-slide-logo {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  object-fit: contain;
+  opacity: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+#transition-overlay.transition--shutter .transition-shutter-layer {
+  display: block;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.07) 0px,
+      rgba(255, 255, 255, 0.07) 1px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0) 4px
+    ),
+    #000;
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+#transition-overlay.transition--glitch .transition-glitch-layer {
+  display: block;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.09) 0px,
+      rgba(255, 255, 255, 0.09) 1px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0) 4px
+    ),
+    linear-gradient(180deg, rgba(10, 14, 21, 0.9), rgba(7, 9, 14, 0.95));
+  will-change: opacity, transform;
+}
+
+#transition-overlay.transition--glitch .transition-glitch-layer::before,
+#transition-overlay.transition--glitch .transition-glitch-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#transition-overlay.transition--glitch .transition-glitch-layer::before {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 65, 65, 0.12) 0%,
+    rgba(0, 0, 0, 0) 45%,
+    rgba(90, 180, 255, 0.12) 100%
+  );
+  transform: translateX(-2px);
+}
+
+#transition-overlay.transition--glitch .transition-glitch-layer::after {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0)),
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 2px,
+      rgba(0, 0, 0, 0) 3px,
+      rgba(0, 0, 0, 0) 6px
+    );
+  transform: translateX(2px);
+}
+
+#transition-overlay.transition--glitch .transition-flash-layer {
+  display: block;
+  background: #ffffff;
+  will-change: opacity;
 }
 
 .settings-row {

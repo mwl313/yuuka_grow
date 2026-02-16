@@ -9,9 +9,10 @@ const BLINK_REPEAT_COUNT = 2;
 const BLINK_FINAL_ON_MS = 160;
 const HOLD_BEFORE_DIVE_MS = 280;
 const DIVE_MS = 480;
-const LOGO_PRE_FADE_MS = 120;
 const OVERLAY_FADE_OUT_MS = 150;
 const DIVE_SCALE_FALLBACK = 4.4;
+const DIVE_EXTRA_SCALE_MULT = 1.12;
+const DIVE_ORIGIN_Y_OFFSET_PCT = -2.5;
 const PADDING_PX = 24;
 
 const GAMEBOY_W = 694;
@@ -27,6 +28,7 @@ const HOLE_WIDTH_PCT = (HOLE_W / GAMEBOY_W) * 100;
 const HOLE_HEIGHT_PCT = (HOLE_H / GAMEBOY_H) * 100;
 const HOLE_CENTER_X_PCT = ((HOLE_X + HOLE_W / 2) / GAMEBOY_W) * 100;
 const HOLE_CENTER_Y_PCT = ((HOLE_Y + HOLE_H / 2) / GAMEBOY_H) * 100;
+const DIVE_ORIGIN_Y_PCT = Math.max(0, Math.min(100, HOLE_CENTER_Y_PCT + DIVE_ORIGIN_Y_OFFSET_PCT));
 
 const FRAME_SRC = "/assets/boot/boot_gameboy.webp";
 const LOGO_SRC = "/assets/boot/boot_gddlogo.webp";
@@ -125,7 +127,7 @@ function createBootOverlay(): {
 
   const wrap = document.createElement("div");
   wrap.className = "boot-gb-wrap";
-  wrap.style.transformOrigin = `${HOLE_CENTER_X_PCT}% ${HOLE_CENTER_Y_PCT}%`;
+  wrap.style.transformOrigin = `${HOLE_CENTER_X_PCT}% ${DIVE_ORIGIN_Y_PCT}%`;
 
   const frameImage = document.createElement("img");
   frameImage.className = "boot-gb-frame";
@@ -189,7 +191,7 @@ async function runDiveTransition(params: {
   const overlayRect = overlay.getBoundingClientRect();
   const wrapRect = wrap.getBoundingClientRect();
   const logoRect = logoImage.getBoundingClientRect();
-  const originY = wrapRect.top + (wrapRect.height * HOLE_CENTER_Y_PCT) / 100;
+  const originY = wrapRect.top + (wrapRect.height * DIVE_ORIGIN_Y_PCT) / 100;
 
   // Solve s from: originY + (logoBottom - originY) * s = overlayBottom
   const denominator = logoRect.bottom - originY;
@@ -197,24 +199,29 @@ async function runDiveTransition(params: {
     denominator > 0
       ? (overlayRect.bottom - originY) / denominator
       : DIVE_SCALE_FALLBACK;
-  const diveScale =
+  const baseScale =
     Number.isFinite(computedScale) && computedScale > 1
       ? computedScale
       : DIVE_SCALE_FALLBACK;
+  const diveScale = baseScale * DIVE_EXTRA_SCALE_MULT;
 
   const wrapAnim = wrap.animate([{ transform: "scale(1)" }, { transform: `scale(${diveScale})` }], {
     duration: DIVE_MS,
     easing: "cubic-bezier(0.65, 0, 0.9, 0.35)",
     fill: "forwards",
   });
-  await waitAnimationDone(wrapAnim);
-
-  const logoFadeAnim = logoImage.animate([{ opacity: 1 }, { opacity: 0 }], {
-    duration: LOGO_PRE_FADE_MS,
-    easing: "ease-out",
-    fill: "forwards",
-  });
-  await waitAnimationDone(logoFadeAnim);
+  const logoFadeTask = (async () => {
+    const fadeDelayMs = Math.floor(DIVE_MS * 0.5);
+    const fadeDurationMs = Math.max(1, DIVE_MS - fadeDelayMs);
+    await delay(fadeDelayMs);
+    const logoFadeAnim = logoImage.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: fadeDurationMs,
+      easing: "ease-out",
+      fill: "forwards",
+    });
+    await waitAnimationDone(logoFadeAnim);
+  })();
+  await Promise.all([waitAnimationDone(wrapAnim), logoFadeTask]);
 
   const overlayFadeAnim = overlay.animate([{ opacity: 1 }, { opacity: 0 }], {
     duration: OVERLAY_FADE_OUT_MS,
