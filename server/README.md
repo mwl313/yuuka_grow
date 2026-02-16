@@ -51,6 +51,18 @@ wrangler d1 migrations apply yuuka_grow_db --remote
 wrangler dev
 ```
 
+## 관리자 인증 시크릿
+```bash
+wrangler secret put ADMIN_USER
+wrangler secret put ADMIN_PASS
+```
+
+## 관리자 마이그레이션 적용(추가 3줄)
+```bash
+wrangler d1 migrations apply yuuka_grow_db --local
+wrangler d1 migrations apply yuuka_grow_db --remote
+```
+
 ## 7) 배포
 ```bash
 wrangler deploy
@@ -60,6 +72,12 @@ wrangler deploy
 - `POST /api/submit`
 - `GET /api/leaderboard?sort=credit|thigh&limit=100`
 - `GET /share/:shareId`
+- `GET /admin` (Basic Auth)
+- `GET /admin/api/search`
+- `GET /admin/api/run`
+- `POST /admin/api/update`
+- `POST /admin/api/hide`
+- `POST /admin/api/delete`
 
 ## 개발 시 주의
 - 프론트(Vite dev 서버)에서 `/api/*`를 직접 호출하면 라우팅이 프론트 서버로 갈 수 있다.

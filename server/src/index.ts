@@ -1,3 +1,5 @@
+import { requireAdminAuth } from "./admin/auth";
+import { renderAdminPageHtml } from "./admin/html";
 import { computeRankPercentile, generateShareId, sanitizeNickname, toNonNegativeInt } from "./lib/runUtils";
 
 type EndingCategory = "normal" | "bankrupt" | "stress" | "special";
@@ -5,6 +7,8 @@ type SortKey = "credit" | "thigh";
 
 interface AppEnv {
 	DB: D1Database;
+	ADMIN_USER?: string;
+	ADMIN_PASS?: string;
 }
 
 interface SubmitPayload {
@@ -32,6 +36,8 @@ interface RunRecord {
 	final_stage: number;
 	submitted_at_client: string;
 	submitted_at_server: string;
+	is_hidden?: number;
+	updated_at?: string | null;
 }
 
 interface RankOutput {
@@ -44,6 +50,7 @@ const CORS_METHODS = "GET, POST, OPTIONS";
 const CORS_HEADERS = "Content-Type";
 const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special"]);
 let runIdSchemaEnsured = false;
+let adminSchemaEnsured = false;
 
 function escapeHtml(input: string): string {
 	return input
@@ -150,6 +157,35 @@ async function ensureRunIdSchema(db: D1Database): Promise<void> {
 	}
 	await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_run_id_unique ON runs(run_id) WHERE run_id IS NOT NULL").run();
 	runIdSchemaEnsured = true;
+}
+
+async function ensureAdminSchema(db: D1Database): Promise<void> {
+	if (adminSchemaEnsured) return;
+
+	try {
+		await db.prepare("ALTER TABLE runs ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0").run();
+	} catch {
+		// Column already exists on upgraded environments.
+	}
+	try {
+		await db.prepare("ALTER TABLE runs ADD COLUMN updated_at TEXT").run();
+	} catch {
+		// Column already exists on upgraded environments.
+	}
+	await db.prepare("CREATE INDEX IF NOT EXISTS idx_runs_is_hidden ON runs(is_hidden)").run();
+	adminSchemaEnsured = true;
+}
+
+function normalizeShareId(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed.slice(0, 64) : null;
+}
+
+function parseAdminLimitParam(value: string | null): number {
+	const raw = Number.parseInt(value ?? "", 10);
+	if (!Number.isFinite(raw)) return 50;
+	return Math.min(200, Math.max(1, raw));
 }
 
 async function scalarNumber(db: D1Database, sql: string, bindings: unknown[] = []): Promise<number> {
@@ -268,6 +304,48 @@ async function findRunByRunId(db: D1Database, runId: string): Promise<RunRecord 
 	);
 }
 
+async function findRunByShareId(db: D1Database, shareId: string): Promise<RunRecord | null> {
+	return (
+		(await db
+			.prepare(
+				`SELECT
+					share_id,
+					run_id,
+					nickname,
+					ending_category,
+					ending_id,
+					survival_days,
+					final_credits,
+					final_thigh_cm,
+					final_stage,
+					submitted_at_client,
+					submitted_at_server,
+					COALESCE(is_hidden, 0) AS is_hidden,
+					updated_at
+				FROM runs
+				WHERE share_id = ?
+				LIMIT 1`,
+			)
+			.bind(shareId)
+			.first<RunRecord>()) ?? null
+	);
+}
+
+async function readJsonBody<T>(request: Request): Promise<T | null> {
+	try {
+		return (await request.json()) as T;
+	} catch {
+		return null;
+	}
+}
+
+function pickFirst(body: Record<string, unknown>, keys: string[]): unknown {
+	for (const key of keys) {
+		if (key in body) return body[key];
+	}
+	return undefined;
+}
+
 async function handleSubmit(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
 	await ensureRunIdSchema(env.DB);
 
@@ -377,6 +455,8 @@ async function handleSubmit(request: Request, env: AppEnv, origin: string | null
 }
 
 async function handleLeaderboard(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureAdminSchema(env.DB);
+
 	const url = new URL(request.url);
 	const sort = parseSortParam(url.searchParams.get("sort"));
 	const limit = parseLimitParam(url.searchParams.get("limit"));
@@ -393,6 +473,7 @@ async function handleLeaderboard(request: Request, env: AppEnv, origin: string |
 			submitted_at_client,
 			submitted_at_server
 		FROM runs
+		WHERE COALESCE(is_hidden, 0) = 0
 		ORDER BY ${orderBy}, submitted_at_server DESC
 		LIMIT ${limit}
 	`;
@@ -406,6 +487,192 @@ async function handleLeaderboard(request: Request, env: AppEnv, origin: string |
 		200,
 		origin,
 	);
+}
+
+async function handleAdminSearch(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureAdminSchema(env.DB);
+
+	const url = new URL(request.url);
+	const shareId = normalizeShareId(url.searchParams.get("shareId"));
+	const nicknameRaw = typeof url.searchParams.get("nickname") === "string" ? url.searchParams.get("nickname") ?? "" : "";
+	const nickname = nicknameRaw.trim().slice(0, 32);
+	const limit = parseAdminLimitParam(url.searchParams.get("limit"));
+
+	const conditions: string[] = [];
+	const bindings: unknown[] = [];
+	if (shareId) {
+		conditions.push("share_id = ?");
+		bindings.push(shareId);
+	}
+	if (nickname) {
+		conditions.push("nickname LIKE ?");
+		bindings.push(`%${nickname}%`);
+	}
+	const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+	const sql = `
+		SELECT
+			share_id,
+			run_id,
+			nickname,
+			ending_category,
+			ending_id,
+			survival_days,
+			final_credits,
+			final_thigh_cm,
+			final_stage,
+			submitted_at_client,
+			submitted_at_server,
+			COALESCE(is_hidden, 0) AS is_hidden,
+			updated_at
+		FROM runs
+		${whereClause}
+		ORDER BY submitted_at_server DESC
+		LIMIT ?
+	`;
+	bindings.push(limit);
+	const rows = await env.DB.prepare(sql).bind(...bindings).all<RunRecord>();
+	return jsonResponse({ ok: true, items: rows.results ?? [] }, 200, origin);
+}
+
+async function handleAdminRun(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureAdminSchema(env.DB);
+
+	const url = new URL(request.url);
+	const shareId = normalizeShareId(url.searchParams.get("shareId"));
+	if (!shareId) return jsonResponse({ ok: false, error: "shareId is required" }, 400, origin);
+
+	const item = await findRunByShareId(env.DB, shareId);
+	if (!item) return jsonResponse({ ok: false, error: "Not Found" }, 404, origin);
+	return jsonResponse({ ok: true, item }, 200, origin);
+}
+
+async function handleAdminUpdate(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureAdminSchema(env.DB);
+
+	const body = await readJsonBody<Record<string, unknown>>(request);
+	if (!body) return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+
+	const shareId = normalizeShareId(pickFirst(body, ["shareId", "share_id"]));
+	if (!shareId) return jsonResponse({ ok: false, error: "shareId is required" }, 400, origin);
+
+	const updates: string[] = [];
+	const binds: unknown[] = [];
+
+	const nicknameInput = pickFirst(body, ["nickname"]);
+	if (nicknameInput !== undefined) {
+		updates.push("nickname = ?");
+		binds.push(sanitizeNickname(nicknameInput));
+	}
+
+	const endingCategoryInput = pickFirst(body, ["endingCategory", "ending_category", "endingType", "ending_type"]);
+	if (endingCategoryInput !== undefined) {
+		if (!ENDING_CATEGORY_SET.has(String(endingCategoryInput) as EndingCategory)) {
+			return jsonResponse({ ok: false, error: "Invalid ending category" }, 400, origin);
+		}
+		updates.push("ending_category = ?");
+		binds.push(String(endingCategoryInput));
+	}
+
+	const endingIdInput = pickFirst(body, ["endingId", "ending_id", "ending"]);
+	if (endingIdInput !== undefined) {
+		updates.push("ending_id = ?");
+		binds.push(normalizeEndingId(endingIdInput));
+	}
+
+	const daysInput = pickFirst(body, ["survivalDays", "survival_days", "days"]);
+	if (daysInput !== undefined) {
+		updates.push("survival_days = ?");
+		binds.push(toNonNegativeInt(daysInput));
+	}
+
+	const creditsInput = pickFirst(body, ["finalCredits", "final_credits"]);
+	if (creditsInput !== undefined) {
+		updates.push("final_credits = ?");
+		binds.push(toNonNegativeInt(creditsInput));
+	}
+
+	const thighInput = pickFirst(body, ["finalThighCm", "final_thigh_cm"]);
+	if (thighInput !== undefined) {
+		updates.push("final_thigh_cm = ?");
+		binds.push(toNonNegativeInt(thighInput));
+	}
+
+	const stageInput = pickFirst(body, ["finalStage", "final_stage"]);
+	if (stageInput !== undefined) {
+		updates.push("final_stage = ?");
+		binds.push(toNonNegativeInt(stageInput));
+	}
+
+	const submittedAtClientInput = pickFirst(body, ["submittedAtClient", "submitted_at_client"]);
+	if (submittedAtClientInput !== undefined) {
+		updates.push("submitted_at_client = ?");
+		binds.push(normalizeSubmittedAtClient(submittedAtClientInput, new Date().toISOString()));
+	}
+
+	const clientVersionInput = pickFirst(body, ["clientVersion", "client_version"]);
+	if (clientVersionInput !== undefined) {
+		updates.push("client_version = ?");
+		binds.push(normalizeClientVersion(clientVersionInput));
+	}
+
+	updates.push("updated_at = ?");
+	binds.push(new Date().toISOString());
+
+	binds.push(shareId);
+	const result = await env.DB
+		.prepare(`UPDATE runs SET ${updates.join(", ")} WHERE share_id = ?`)
+		.bind(...binds)
+		.run();
+	if (!result.success) return jsonResponse({ ok: false, error: "Update failed" }, 500, origin);
+	if ((result.meta?.changes ?? 0) === 0) return jsonResponse({ ok: false, error: "Not Found" }, 404, origin);
+	return jsonResponse({ ok: true }, 200, origin);
+}
+
+async function handleAdminHide(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureAdminSchema(env.DB);
+
+	const body = await readJsonBody<Record<string, unknown>>(request);
+	if (!body) return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+	const shareId = normalizeShareId(pickFirst(body, ["shareId", "share_id"]));
+	if (!shareId) return jsonResponse({ ok: false, error: "shareId is required" }, 400, origin);
+	const isHidden = Boolean(pickFirst(body, ["isHidden", "is_hidden"])) ? 1 : 0;
+
+	const result = await env.DB
+		.prepare("UPDATE runs SET is_hidden = ?, updated_at = ? WHERE share_id = ?")
+		.bind(isHidden, new Date().toISOString(), shareId)
+		.run();
+	if ((result.meta?.changes ?? 0) === 0) return jsonResponse({ ok: false, error: "Not Found" }, 404, origin);
+	return jsonResponse({ ok: true }, 200, origin);
+}
+
+async function handleAdminDelete(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	const body = await readJsonBody<Record<string, unknown>>(request);
+	if (!body) return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+	const shareId = normalizeShareId(pickFirst(body, ["shareId", "share_id"]));
+	if (!shareId) return jsonResponse({ ok: false, error: "shareId is required" }, 400, origin);
+
+	const result = await env.DB.prepare("DELETE FROM runs WHERE share_id = ?").bind(shareId).run();
+	if ((result.meta?.changes ?? 0) === 0) return jsonResponse({ ok: false, error: "Not Found" }, 404, origin);
+	return jsonResponse({ ok: true }, 200, origin);
+}
+
+async function handleAdminApi(request: Request, env: AppEnv, origin: string | null, pathname: string): Promise<Response> {
+	if (request.method === "GET" && pathname === "/admin/api/search") {
+		return handleAdminSearch(request, env, origin);
+	}
+	if (request.method === "GET" && pathname === "/admin/api/run") {
+		return handleAdminRun(request, env, origin);
+	}
+	if (request.method === "POST" && pathname === "/admin/api/update") {
+		return handleAdminUpdate(request, env, origin);
+	}
+	if (request.method === "POST" && pathname === "/admin/api/hide") {
+		return handleAdminHide(request, env, origin);
+	}
+	if (request.method === "POST" && pathname === "/admin/api/delete") {
+		return handleAdminDelete(request, env, origin);
+	}
+	return jsonResponse({ ok: false, error: "Not Found" }, 404, origin);
 }
 
 function formatTopPercent(percentile: number): string {
@@ -503,22 +770,36 @@ export default {
 	async fetch(request: Request, env: AppEnv): Promise<Response> {
 		const url = new URL(request.url);
 		const origin = getAllowedCorsOrigin(request);
+		const pathname = url.pathname;
+
+		if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+			const denied = requireAdminAuth(request, env);
+			if (denied) return denied;
+
+			if (request.method === "GET" && pathname === "/admin") {
+				return htmlResponse(renderAdminPageHtml(), 200, origin);
+			}
+			if (pathname.startsWith("/admin/api/")) {
+				return handleAdminApi(request, env, origin, pathname);
+			}
+			return new Response("Not Found", { status: 404 });
+		}
 
 		if (request.method === "OPTIONS") {
 			return optionsResponse(origin);
 		}
 
 		try {
-			if (request.method === "POST" && url.pathname === "/api/submit") {
+			if (request.method === "POST" && pathname === "/api/submit") {
 				return await handleSubmit(request, env, origin);
 			}
-			if (request.method === "GET" && url.pathname === "/api/leaderboard") {
+			if (request.method === "GET" && pathname === "/api/leaderboard") {
 				return await handleLeaderboard(request, env, origin);
 			}
-			if (request.method === "GET" && url.pathname.startsWith("/share/")) {
+			if (request.method === "GET" && pathname.startsWith("/share/")) {
 				return await handleSharePage(request, env, origin);
 			}
-			if (url.pathname.startsWith("/api/")) {
+			if (pathname.startsWith("/api/")) {
 				return routeApiNotFound(origin);
 			}
 			return new Response("Yuuka Grow API", { status: 200 });

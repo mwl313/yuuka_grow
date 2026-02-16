@@ -61,8 +61,6 @@ interface UiRefs {
   scoreDay: HTMLElement;
   scoreCredits: HTMLElement;
   scoreStress: HTMLElement;
-  scoreRankCredit: HTMLElement;
-  scoreRankThigh: HTMLElement;
   scoreRankCreditPopup: HTMLElement;
   scoreRankThighPopup: HTMLElement;
   scoreUploadStatus: HTMLElement;
@@ -222,10 +220,6 @@ export class UiController {
               <li class="score-row"><span class="score-label" id="score-label-credits"></span><span class="score-value" id="score-credits"></span></li>
               <li class="score-row"><span class="score-label" id="score-label-stress"></span><span class="score-value" id="score-stress"></span></li>
             </ul>
-            <div class="score-rank-box">
-              <p id="score-rank-credit" class="score-rank-line"></p>
-              <p id="score-rank-thigh" class="score-rank-line"></p>
-            </div>
             <p id="score-upload-status" class="score-upload-status"></p>
             <div class="stack-buttons">
               <button id="btn-retry" class="skin-button font-title"></button>
@@ -390,8 +384,6 @@ export class UiController {
       scoreDay: pick("score-day"),
       scoreCredits: pick("score-credits"),
       scoreStress: pick("score-stress"),
-      scoreRankCredit: pick("score-rank-credit"),
-      scoreRankThigh: pick("score-rank-thigh"),
       scoreRankCreditPopup: pick("score-rank-credit-popup"),
       scoreRankThighPopup: pick("score-rank-thigh-popup"),
       scoreUploadStatus: pick("score-upload-status"),
@@ -845,15 +837,11 @@ export class UiController {
     if (this.uploadedMeta) {
       const credit = formatRankLine(this.uploadedMeta.credit);
       const thigh = formatRankLine(this.uploadedMeta.thigh);
-      this.refs.scoreRankCredit.textContent = t("score.rank.credit", credit);
-      this.refs.scoreRankThigh.textContent = t("score.rank.thigh", thigh);
       this.refs.scoreRankCreditPopup.textContent = t("score.rank.credit", credit);
       this.refs.scoreRankThighPopup.textContent = t("score.rank.thigh", thigh);
     } else {
       const pendingCredit = t("score.rank.pending.credit");
       const pendingThigh = t("score.rank.pending.thigh");
-      this.refs.scoreRankCredit.textContent = pendingCredit;
-      this.refs.scoreRankThigh.textContent = pendingThigh;
       this.refs.scoreRankCreditPopup.textContent = pendingCredit;
       this.refs.scoreRankThighPopup.textContent = pendingThigh;
     }
