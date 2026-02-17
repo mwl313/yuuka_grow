@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "bgm:manifest": "node scripts/buildBgmManifest.mjs",
     "bgm:encode": "python tools/encode_bgm.py",
     "i18n:sync:endings": "node --loader ts-node/esm scripts/syncEndingTitles.ts",
     "i18n:sync": "npm run i18n:sync:endings",
     "build:guests-manifest": "node scripts/buildGuestsManifest.mjs",
     "build:food-manifest": "node scripts/buildActionManifest.mjs food",
     "build:work-manifest": "node scripts/buildActionManifest.mjs work",
-    "build:assets-manifests": "npm run build:guests-manifest && npm run build:food-manifest && npm run build:work-manifest",
-    "prebuild": "npm run i18n:sync:endings",
+    "build:assets-manifests": "npm run build:guests-manifest && npm run build:food-manifest && npm run build:work-manifest && npm run bgm:manifest",
+    "prebuild": "npm run i18n:sync:endings && npm run bgm:manifest",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

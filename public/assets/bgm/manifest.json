@@ -1,0 +1,31 @@
+{
+  "lobby": [
+    "lobby/vol2_02_pixel_time.mp3"
+  ],
+  "leaderboard": [
+    "leaderboard/vol1_cd1_1-15_ares.mp3"
+  ],
+  "gameearly": [
+    "gameearly/vol2_12_vivid_night.mp3"
+  ],
+  "gamemid": [
+    "gamemid/vol2_01_neo_city_dive.mp3",
+    "gamemid/vol3_2-03_nrg_field.mp3"
+  ],
+  "gamelate": [
+    "gamelate/vol1_cd2_2-09_crossfire.mp3",
+    "gamelate/vol2_19_undefined_behavior.mp3"
+  ],
+  "gameend": [
+    "gameend/vol3_2-09_blood_stained_faith.mp3",
+    "gameend/ブルーアーカイブ Blue Archive OST 98. Oxygen Destroyer - MO2 (youtube).mp3"
+  ],
+  "gamefinal": [
+    "gamefinal/vol1_cd2_2-06_endless_carnival.mp3",
+    "gamefinal/ブルーアーカイブ Blue Archive OST 110. Codex of Omen - MO2 (youtube).mp3",
+    "gamefinal/ブルーアーカイブ Blue Archive OST 156. Final Destination of Ark - MO2 (youtube).mp3"
+  ],
+  "result": [
+    "result/vol1_cd1_1-11_plug_and_play.mp3"
+  ]
+}

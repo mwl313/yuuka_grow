@@ -1,5 +1,6 @@
 import { buildShareUrl, fetchLeaderboard, submitRun } from "../api/leaderboardApi";
 import type { LeaderboardItem, LeaderboardSort, RankEntry } from "../api/leaderboardApi";
+import { BgmManager } from "../audio/bgmManager";
 import { applyEat, applyGuest, applyWork } from "../core/actions";
 import { APP_VERSION, AUTHOR_NAME, DEFAULT_NICKNAME, IP_LABEL, VOLUME_STEP } from "../core/constants";
 import { checkImmediateBankrupt, toBaseEndCategory } from "../core/endings";
@@ -168,6 +169,7 @@ export class UiController {
   private readonly root: HTMLElement;
   private readonly refs: UiRefs;
   private renderer: YuukaRenderer | null = null;
+  private readonly bgmManager = new BgmManager();
   private state: GameState;
   private save: SaveData;
   private settings: Settings;
@@ -197,6 +199,7 @@ export class UiController {
     this.endingCollection = getCollection();
     this.state = this.save.state;
     this.settings = loadSettings();
+    this.bgmManager.setVolume(this.settings.bgmVolume, this.settings.masterMuted);
     this.initUiAnimators();
 
     this.applyLabels();
@@ -684,6 +687,14 @@ export class UiController {
   }
 
   private bindEvents(): void {
+    this.root.addEventListener(
+      "pointerdown",
+      () => {
+        void this.bgmManager.unlock();
+      },
+      { passive: true },
+    );
+
     [
       this.refs.btnStart,
       this.refs.btnSettings,
@@ -833,9 +844,11 @@ export class UiController {
     setLanguage(language);
     saveSettings(this.settings);
     this.renderer?.updateAudioSettings(this.settings);
+    this.bgmManager.setVolume(this.settings.bgmVolume, this.settings.masterMuted);
   }
 
   private startGame(): void {
+    void this.bgmManager.unlock();
     this.resetForNewRun();
     this.openAbandonConfirm(false);
     this.ensureRenderer();
@@ -922,6 +935,7 @@ export class UiController {
     saveSettings(this.settings);
     this.updateSoundToggleUi();
     this.renderer?.updateAudioSettings(this.settings);
+    this.bgmManager.setVolume(this.settings.bgmVolume, this.settings.masterMuted);
   }
 
   private updateSoundToggleUi(): void {
@@ -935,6 +949,7 @@ export class UiController {
     this.refs.score.classList.toggle("active", screen === "score");
     this.refs.leaderboard.classList.toggle("active", screen === "leaderboard");
     this.refs.endingBook.classList.toggle("active", screen === "endingBook");
+    this.updateBgmContext();
   }
 
   private async openLeaderboard(): Promise<void> {
@@ -962,6 +977,7 @@ export class UiController {
   }
 
   private handleActionClick(runAction: () => StepResult): void {
+    void this.bgmManager.unlock();
     const shouldStartCooldown = this.uiAnimController.onActionUserInput();
     this.handleStep(runAction());
     if (shouldStartCooldown) {
@@ -1084,6 +1100,29 @@ export class UiController {
 
     this.renderLogs(forceLogRefresh);
     this.renderer?.render(this.state);
+    if (this.activeScreen === "game") {
+      this.updateBgmContext(stage);
+    }
+  }
+
+  private updateBgmContext(stageOverride?: number): void {
+    if (this.activeScreen === "leaderboard") {
+      this.bgmManager.setContext({ screen: "leaderboard" });
+      return;
+    }
+
+    if (this.activeScreen === "score") {
+      this.bgmManager.setContext({ screen: "result" });
+      return;
+    }
+
+    if (this.activeScreen === "game") {
+      const stage = stageOverride ?? getStage(this.state.thighCm);
+      this.bgmManager.setContext({ screen: "game", stage });
+      return;
+    }
+
+    this.bgmManager.setContext({ screen: "lobby" });
   }
 
   private updateActionSlots(actionsRemaining: number): void {
