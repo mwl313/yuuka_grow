@@ -263,6 +263,10 @@ textarea {
   min-height: 46px;
 }
 
+.lobby-ending-book-button {
+  min-height: 44px;
+}
+
 .lobby-dance {
   width: 50%;
   height: auto;
@@ -806,12 +810,7 @@ textarea {
   opacity: 0.85;
 }
 
-.ending-book-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
+.ending-book-table-wrap {
   max-height: 58svh;
   overflow: auto;
   border: 1px solid rgba(96, 122, 150, 0.28);
@@ -819,19 +818,55 @@ textarea {
   background: rgba(255, 255, 255, 0.75);
 }
 
-.ending-book-item {
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(96, 122, 150, 0.2);
-  cursor: pointer;
-  font-size: 14px;
+.ending-book-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
 
-.ending-book-item:last-child {
-  border-bottom: 0;
+.ending-book-table th,
+.ending-book-table td {
+  padding: 8px 10px;
+  border-bottom: 1px dashed rgba(96, 122, 150, 0.24);
+  text-align: left;
+  vertical-align: middle;
 }
 
-.ending-book-item.locked {
-  opacity: 0.75;
+.ending-book-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(245, 249, 255, 0.96);
+  z-index: 1;
+  font-size: 12px;
+}
+
+.ending-book-row--locked {
+  opacity: 0.72;
+}
+
+.ending-book-achieved {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ending-book-achieved.is-achieved {
+  color: #238f3d;
+}
+
+.ending-book-achieved.is-missed {
+  color: #c23b3b;
+}
+
+.ending-book-view-button {
+  min-height: 34px;
+  min-width: 72px;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.ending-book-view-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .leaderboard-sort {

@@ -1,7 +1,7 @@
 import { requireAdminAuth } from "./admin/auth";
 import { renderAdminPageHtml } from "./admin/html";
 import { computeRankPercentile, generateShareId, sanitizeNickname, toNonNegativeInt } from "./lib/runUtils";
-import { getEndingTitle, type Lang } from "../../src/shared/endingTitles";
+import { getEndingTitle, type Lang } from "../../src/shared/endingMeta";
 
 type EndingCategory = "normal" | "bankrupt" | "stress" | "special" | "any";
 type SortKey = "credit" | "thigh";

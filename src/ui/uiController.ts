@@ -14,7 +14,7 @@ import { YuukaRenderer } from "../render/yuukaRenderer";
 import { getCollection, hasEnding, recordEnding, type EndingCollectionMap } from "../storage/endingCollection";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
-import { getEndingTitle } from "../shared/endingTitles";
+import { getEndingCondition, getEndingTitle } from "../shared/endingMeta";
 import { UiAnimController } from "./anim/uiAnimController";
 import { TransitionManager } from "./transition/transitionManager";
 
@@ -59,7 +59,6 @@ interface UiRefs {
   btnLeaderSortThigh: HTMLButtonElement;
   btnLeaderBack: HTMLButtonElement;
   btnEndingBookBack: HTMLButtonElement;
-  btnEndingBookDetailClose: HTMLButtonElement;
   btnMiniLobby: HTMLButtonElement;
   btnMiniSound: HTMLButtonElement;
   hudDay: HTMLElement;
@@ -89,10 +88,7 @@ interface UiRefs {
   leaderboardBody: HTMLTableSectionElement;
   endingBookTitle: HTMLElement;
   endingBookProgress: HTMLElement;
-  endingBookList: HTMLUListElement;
-  endingBookDetailModal: HTMLElement;
-  endingBookDetailTitle: HTMLElement;
-  endingBookDetailDesc: HTMLElement;
+  endingBookBody: HTMLTableSectionElement;
   bgmRange: HTMLInputElement;
   sfxRange: HTMLInputElement;
   voiceRange: HTMLInputElement;
@@ -183,6 +179,8 @@ export class UiController {
   private readonly transitionManager = new TransitionManager();
   private renderedRawLogs: string[] = [];
   private readonly creditNumberFormatter = new Intl.NumberFormat("ko-KR");
+  private endingPanelMode: "normal" | "preview" = "normal";
+  private activeEndingPanelId: string | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -223,8 +221,8 @@ export class UiController {
                 <button id="btn-leaderboard" class="skin-button font-title"></button>
                 <button id="btn-credits" class="skin-button font-title"></button>
                 <button id="btn-guide" class="skin-button font-title"></button>
-                <button id="btn-ending-book" class="skin-button font-title"></button>
               </div>
+              <button id="btn-ending-book" class="skin-button font-title lobby-ending-book-button"></button>
             </div>
             <p id="lobby-disclaimer" class="lobby-disclaimer"></p>
             <p id="lobby-credits" class="lobby-foot"></p>
@@ -331,7 +329,19 @@ export class UiController {
           <div class="skin-panel score-card ending-book-card">
             <h2 id="ending-book-title" class="font-title"></h2>
             <p id="ending-book-progress" class="ending-book-progress"></p>
-            <ul id="ending-book-list" class="ending-book-list"></ul>
+            <div class="ending-book-table-wrap">
+              <table class="ending-book-table">
+                <thead>
+                  <tr>
+                    <th id="ending-book-col-name"></th>
+                    <th id="ending-book-col-condition"></th>
+                    <th id="ending-book-col-achieved"></th>
+                    <th id="ending-book-col-view"></th>
+                  </tr>
+                </thead>
+                <tbody id="ending-book-body"></tbody>
+              </table>
+            </div>
             <button id="btn-ending-book-back" class="skin-button font-title"></button>
           </div>
         </section>
@@ -423,14 +433,6 @@ export class UiController {
             </div>
           </div>
         </div>
-
-        <div id="ending-book-detail-modal" class="overlay hidden">
-          <div class="skin-panel modal-card confirm-card">
-            <h2 id="ending-book-detail-title" class="font-title"></h2>
-            <p id="ending-book-detail-desc" class="modal-temp-body"></p>
-            <button id="btn-ending-book-detail-close" class="skin-button font-title"></button>
-          </div>
-        </div>
       </div>
     `;
   }
@@ -481,7 +483,6 @@ export class UiController {
       btnLeaderSortThigh: pick("btn-leader-sort-thigh"),
       btnLeaderBack: pick("btn-leader-back"),
       btnEndingBookBack: pick("btn-ending-book-back"),
-      btnEndingBookDetailClose: pick("btn-ending-book-detail-close"),
       btnMiniLobby: pick("btn-mini-lobby"),
       btnMiniSound: pick("btn-mini-sound"),
       hudDay: pick("hud-day"),
@@ -511,10 +512,7 @@ export class UiController {
       leaderboardBody: pick("leaderboard-body"),
       endingBookTitle: pick("ending-book-title"),
       endingBookProgress: pick("ending-book-progress"),
-      endingBookList: pick("ending-book-list"),
-      endingBookDetailModal: pick("ending-book-detail-modal"),
-      endingBookDetailTitle: pick("ending-book-detail-title"),
-      endingBookDetailDesc: pick("ending-book-detail-desc"),
+      endingBookBody: pick("ending-book-body"),
       bgmRange: pick("settings-bgm-range"),
       sfxRange: pick("settings-sfx-range"),
       voiceRange: pick("settings-voice-range"),
@@ -580,14 +578,14 @@ export class UiController {
     this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
     this.refs.btnCredits.textContent = t("lobby.btnCredits");
     this.refs.btnGuide.textContent = t("lobby.btnGuide");
-    this.refs.btnEndingBook.textContent = t("lobby.btnEndingBook");
+    this.updateEndingBookButtonLabel();
     this.refs.hudSlotMorningLabel.textContent = t("turn.morning");
     this.refs.hudSlotNoonLabel.textContent = t("turn.noon");
     this.refs.hudSlotEveningLabel.textContent = t("turn.evening");
     this.refs.btnWork.textContent = t("game.action.work");
     this.refs.btnEat.textContent = t("game.action.eat");
     this.refs.btnGuest.textContent = t("game.action.guest");
-    this.refs.btnContinue.textContent = t("ending.continue");
+    this.updateEndingPanelPrimaryButtonLabel();
     this.refs.btnRetry.textContent = t("score.btnRetry");
     this.refs.btnBack.textContent = t("score.btnBack");
     this.refs.btnUploadShare.textContent = this.isUploading
@@ -606,7 +604,10 @@ export class UiController {
     this.refs.btnLeaderBack.textContent = t("leaderboard.back");
     this.refs.endingBookTitle.textContent = t("endingBook.title");
     this.refs.btnEndingBookBack.textContent = t("endingBook.back");
-    this.refs.btnEndingBookDetailClose.textContent = t("settings.close");
+    this.setText("ending-book-col-name", t("endingBook.col.name"));
+    this.setText("ending-book-col-condition", t("endingBook.col.condition"));
+    this.setText("ending-book-col-achieved", t("endingBook.col.achieved"));
+    this.setText("ending-book-col-view", t("endingBook.col.view"));
 
     this.setText("settings-title", t("options.title"));
     this.setText("settings-bgm", t("settings.bgm"));
@@ -650,6 +651,31 @@ export class UiController {
     this.renderEndingBook();
   }
 
+  private updateEndingPanelPrimaryButtonLabel(): void {
+    this.refs.btnContinue.textContent =
+      this.endingPanelMode === "preview" ? t("ending.previewBack") : t("ending.continue");
+  }
+
+  private getEndingBookCounts(): { collected: number; total: number } {
+    const total = ENDING_DEFS.length;
+    let collected = 0;
+    for (const ending of ENDING_DEFS) {
+      if (hasEnding(ending.id, this.endingCollection)) {
+        collected += 1;
+      }
+    }
+    return { collected, total };
+  }
+
+  private updateEndingBookButtonLabel(): void {
+    const { collected, total } = this.getEndingBookCounts();
+    this.refs.btnEndingBook.textContent = t("lobby.btnEndingBookWithProgress", {
+      label: t("lobby.btnEndingBook"),
+      collected: formatNumber(collected),
+      total: formatNumber(total),
+    });
+  }
+
   private bindEvents(): void {
     [
       this.refs.btnStart,
@@ -678,7 +704,6 @@ export class UiController {
       this.refs.btnLeaderSortThigh,
       this.refs.btnLeaderBack,
       this.refs.btnEndingBookBack,
-      this.refs.btnEndingBookDetailClose,
       this.refs.btnMiniLobby,
       this.refs.btnMiniSound,
       this.refs.btnConfirmYes,
@@ -711,6 +736,11 @@ export class UiController {
     this.refs.btnEat.addEventListener("click", () => this.handleActionClick(() => applyEat(this.state)));
     this.refs.btnGuest.addEventListener("click", () => this.handleActionClick(() => applyGuest(this.state, defaultRng)));
     this.refs.btnContinue.addEventListener("click", () => {
+      if (this.endingPanelMode === "preview") {
+        this.toggleEnding(false);
+        this.showScreen("endingBook");
+        return;
+      }
       void this.transitionManager.transitionTo("score", {
         type: "slide",
         direction: "left",
@@ -748,7 +778,6 @@ export class UiController {
     this.refs.btnEndingBookBack.addEventListener("click", () => {
       void this.transitionToLobby();
     });
-    this.refs.btnEndingBookDetailClose.addEventListener("click", () => this.openEndingBookDetail(false));
     this.refs.btnMiniLobby.addEventListener("click", () => this.openAbandonConfirm(true));
     this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
     this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
@@ -773,12 +802,6 @@ export class UiController {
         this.openGuideModal(false);
       }
     });
-    this.refs.endingBookDetailModal.addEventListener("click", (event) => {
-      if (event.target === this.refs.endingBookDetailModal) {
-        this.openEndingBookDetail(false);
-      }
-    });
-
   }
 
   private syncSettingsUi(): void {
@@ -986,8 +1009,7 @@ export class UiController {
       finalizedRun,
     );
     saveData(this.save);
-    this.refs.endingTitle.textContent = t(`ending.${finalizedRun.endingId}.title`);
-    this.refs.endingDesc.textContent = t(`ending.${finalizedRun.endingId}.desc`);
+    this.renderEndingPanel(finalizedRun.endingId, "normal");
     const preShakeTarget = this.refs.game.querySelector<HTMLElement>(".game-main-card") ?? this.refs.game;
     void (async () => {
       await this.transitionManager.playPreShake(preShakeTarget, 260);
@@ -1003,7 +1025,7 @@ export class UiController {
   }
 
   private transitionToLobby(): Promise<void> {
-    this.openEndingBookDetail(false);
+    this.toggleEnding(false);
     return this.transitionManager.transitionTo("lobby", {
       type: "slide",
       direction: "right",
@@ -1013,9 +1035,27 @@ export class UiController {
 
   private toggleEnding(open: boolean): void {
     this.refs.endingOverlay.classList.toggle("hidden", !open);
+    if (!open) {
+      this.endingPanelMode = "normal";
+      this.activeEndingPanelId = null;
+      this.updateEndingPanelPrimaryButtonLabel();
+    }
     this.refs.btnWork.disabled = open;
     this.refs.btnEat.disabled = open;
     this.refs.btnGuest.disabled = open;
+  }
+
+  private renderEndingPanel(endingId: string, mode: "normal" | "preview"): void {
+    this.endingPanelMode = mode;
+    this.activeEndingPanelId = endingId;
+    this.refs.endingTitle.textContent = t(`ending.${endingId}.title`);
+    const condition = t(`ending.${endingId}.condition`);
+    if (condition.startsWith("[[missing:")) {
+      this.refs.endingDesc.textContent = getEndingCondition(endingId, getLanguage());
+    } else {
+      this.refs.endingDesc.textContent = condition;
+    }
+    this.updateEndingPanelPrimaryButtonLabel();
   }
 
   private renderGameUi(forceLogRefresh = false): void {
@@ -1376,47 +1416,46 @@ export class UiController {
   }
 
   private renderEndingBook(): void {
-    this.refs.endingBookList.innerHTML = "";
-    const total = ENDING_DEFS.length;
-    let collected = 0;
-
-    for (const ending of ENDING_DEFS) {
-      const item = document.createElement("li");
-      item.className = "ending-book-item";
-      const unlocked = hasEnding(ending.id, this.endingCollection);
-      if (unlocked) {
-        collected += 1;
-      }
-      item.textContent = unlocked ? t(ending.titleKey) : t("endingBook.locked");
-      item.classList.toggle("locked", !unlocked);
-      item.addEventListener("click", () => this.openEndingBookDetail(true, ending.id, unlocked));
-      this.refs.endingBookList.append(item);
-    }
-
+    this.refs.endingBookBody.innerHTML = "";
+    const { collected, total } = this.getEndingBookCounts();
     this.refs.endingBookProgress.textContent = t("endingBook.progress", {
       collected: formatNumber(collected),
       total: formatNumber(total),
     });
-  }
+    this.updateEndingBookButtonLabel();
 
-  private openEndingBookDetail(open: boolean, endingId?: string, unlocked = false): void {
-    this.refs.endingBookDetailModal.classList.toggle("hidden", !open);
-    if (!open) return;
-    if (!endingId) {
-      this.refs.endingBookDetailTitle.textContent = t("endingBook.locked");
-      this.refs.endingBookDetailDesc.textContent = t("endingBook.locked");
-      return;
+    for (const ending of ENDING_DEFS) {
+      const unlocked = hasEnding(ending.id, this.endingCollection);
+      const row = document.createElement("tr");
+      row.className = unlocked ? "ending-book-row" : "ending-book-row ending-book-row--locked";
+
+      const nameCell = document.createElement("td");
+      nameCell.textContent = unlocked ? t(ending.titleKey) : t("endingBook.locked");
+
+      const conditionCell = document.createElement("td");
+      conditionCell.textContent = unlocked ? t(`ending.${ending.id}.condition`) : t("endingBook.locked");
+
+      const achievedCell = document.createElement("td");
+      achievedCell.textContent = unlocked ? t("endingBook.achieved") : t("endingBook.notAchieved");
+      achievedCell.className = unlocked ? "ending-book-achieved is-achieved" : "ending-book-achieved is-missed";
+
+      const actionCell = document.createElement("td");
+      const viewButton = document.createElement("button");
+      viewButton.type = "button";
+      viewButton.className = "skin-button font-title ending-book-view-button";
+      viewButton.textContent = t("endingBook.view");
+      viewButton.disabled = !unlocked;
+      if (unlocked) {
+        viewButton.addEventListener("click", () => {
+          this.renderEndingPanel(ending.id, "preview");
+          this.toggleEnding(true);
+        });
+      }
+      actionCell.append(viewButton);
+
+      row.append(nameCell, conditionCell, achievedCell, actionCell);
+      this.refs.endingBookBody.append(row);
     }
-
-    const def = ENDING_DEFS.find((item) => item.id === endingId);
-    if (!def || !unlocked) {
-      this.refs.endingBookDetailTitle.textContent = t("endingBook.locked");
-      this.refs.endingBookDetailDesc.textContent = t("endingBook.locked");
-      return;
-    }
-
-    this.refs.endingBookDetailTitle.textContent = t(def.titleKey);
-    this.refs.endingBookDetailDesc.textContent = t(def.descKey);
   }
 
   private createLeaderboardCell(value: string): HTMLTableCellElement {
@@ -1463,8 +1502,9 @@ export class UiController {
     this.renderGameUi();
     if (this.latestResult) {
       this.renderScore();
-      this.refs.endingTitle.textContent = t(`ending.${this.latestResult.endingId}.title`);
-      this.refs.endingDesc.textContent = t(`ending.${this.latestResult.endingId}.desc`);
+    }
+    if (this.activeEndingPanelId) {
+      this.renderEndingPanel(this.activeEndingPanelId, this.endingPanelMode);
     }
   }
 }
