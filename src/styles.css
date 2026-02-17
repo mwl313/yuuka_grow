@@ -565,13 +565,23 @@ textarea {
   display: none;
 }
 
-#ending-overlay.ending-overlay--enter .modal-card {
+.overlay.overlay--enter-rise .panel-transition-card {
   animation: ending-panel-rise-up 520ms cubic-bezier(0.2, 0.75, 0.2, 1);
   will-change: transform, opacity;
 }
 
-#ending-overlay.ending-overlay--enter {
+.overlay.overlay--enter-rise {
   animation: ending-overlay-dim-in 520ms ease-out;
+  will-change: background-color;
+}
+
+.overlay.overlay--exit-fall .panel-transition-card {
+  animation: ending-panel-fall-down 520ms cubic-bezier(0.4, 0.15, 0.35, 1);
+  will-change: transform, opacity;
+}
+
+.overlay.overlay--exit-fall {
+  animation: ending-overlay-dim-out 520ms ease-out;
   will-change: background-color;
 }
 
@@ -592,6 +602,26 @@ textarea {
   }
   100% {
     background: rgba(17, 27, 45, 0.42);
+  }
+}
+
+@keyframes ending-panel-fall-down {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh);
+    opacity: 0.7;
+  }
+}
+
+@keyframes ending-overlay-dim-out {
+  0% {
+    background: rgba(17, 27, 45, 0.42);
+  }
+  100% {
+    background: rgba(17, 27, 45, 0);
   }
 }
 

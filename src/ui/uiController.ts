@@ -23,6 +23,7 @@ import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
 import { getEndingCondition, getEndingTitle } from "../shared/endingMeta";
 import { UiAnimController } from "./anim/uiAnimController";
+import { clearPanelTransition, hidePanelWithTransition, showPanelWithTransition } from "./transition/panelTransition";
 import { TransitionManager } from "./transition/transitionManager";
 
 type ScreenId = "lobby" | "game" | "score" | "leaderboard" | "endingBook";
@@ -357,7 +358,7 @@ export class UiController {
         </section>
 
         <div id="ending-overlay" class="overlay hidden">
-          <div class="skin-panel modal-card">
+          <div class="skin-panel modal-card panel-transition-card">
             <h2 id="ending-title" class="font-title"></h2>
             <p id="ending-desc"></p>
             <button id="btn-continue" class="skin-button font-title"></button>
@@ -365,7 +366,7 @@ export class UiController {
         </div>
 
         <div id="settings-modal" class="overlay hidden">
-          <div class="skin-panel modal-card">
+          <div class="skin-panel modal-card panel-transition-card">
             <h2 id="settings-title" class="font-title"></h2>
             <label class="settings-row">
               <span id="settings-bgm"></span>
@@ -392,7 +393,7 @@ export class UiController {
         </div>
 
         <div id="nickname-modal" class="overlay hidden">
-          <div class="skin-panel modal-card">
+          <div class="skin-panel modal-card panel-transition-card">
             <h2 id="nickname-title" class="font-title"></h2>
             <label class="settings-row">
               <span id="nickname-label"></span>
@@ -406,7 +407,7 @@ export class UiController {
         </div>
 
         <div id="credits-modal" class="overlay hidden">
-          <div class="skin-panel modal-card">
+          <div class="skin-panel modal-card panel-transition-card">
             <h2 id="credits-title" class="font-title"></h2>
             <p id="credits-body" class="modal-temp-body"></p>
             <button id="btn-close-credits" class="skin-button font-title"></button>
@@ -414,7 +415,7 @@ export class UiController {
         </div>
 
         <div id="guide-modal" class="overlay hidden">
-          <div class="skin-panel modal-card">
+          <div class="skin-panel modal-card panel-transition-card">
             <h2 id="guide-title" class="font-title"></h2>
             <p id="guide-body" class="modal-temp-body"></p>
             <button id="btn-close-guide" class="skin-button font-title"></button>
@@ -422,7 +423,7 @@ export class UiController {
         </div>
 
         <div id="confirm-overlay" class="overlay hidden">
-          <div class="skin-panel modal-card confirm-card">
+          <div class="skin-panel modal-card panel-transition-card confirm-card">
             <p id="confirm-text"></p>
             <div class="confirm-actions">
               <button id="btn-confirm-yes" class="skin-button font-title"></button>
@@ -432,7 +433,7 @@ export class UiController {
         </div>
 
         <div id="upload-result-overlay" class="overlay hidden">
-          <div class="skin-panel modal-card confirm-card upload-result-card">
+          <div class="skin-panel modal-card panel-transition-card confirm-card upload-result-card">
             <button id="btn-upload-result-close" class="upload-result-close" type="button">X</button>
             <h2 id="upload-result-title" class="font-title"></h2>
             <p id="score-rank-credit-popup" class="score-rank-line"></p>
@@ -882,11 +883,11 @@ export class UiController {
   }
 
   private openSettings(open: boolean): void {
-    this.refs.settingsModal.classList.toggle("hidden", !open);
+    this.setOverlayOpen(this.refs.settingsModal, open);
   }
 
   private openNicknameModal(open: boolean): void {
-    this.refs.nicknameModal.classList.toggle("hidden", !open);
+    this.setOverlayOpen(this.refs.nicknameModal, open);
     if (open) {
       this.refs.nicknameInput.value = this.settings.nickname;
       this.refs.nicknameInput.focus();
@@ -895,11 +896,11 @@ export class UiController {
   }
 
   private openCreditsModal(open: boolean): void {
-    this.refs.creditsModal.classList.toggle("hidden", !open);
+    this.setOverlayOpen(this.refs.creditsModal, open);
   }
 
   private openGuideModal(open: boolean): void {
-    this.refs.guideModal.classList.toggle("hidden", !open);
+    this.setOverlayOpen(this.refs.guideModal, open);
   }
 
   private applyNickname(): void {
@@ -913,11 +914,11 @@ export class UiController {
   }
 
   private openAbandonConfirm(open: boolean): void {
-    this.refs.confirmOverlay.classList.toggle("hidden", !open);
+    this.setOverlayOpen(this.refs.confirmOverlay, open);
   }
 
   private openUploadResultPopup(open: boolean): void {
-    this.refs.uploadResultOverlay.classList.toggle("hidden", !open);
+    this.setOverlayOpen(this.refs.uploadResultOverlay, open);
   }
 
   private confirmAbandon(): void {
@@ -1056,9 +1057,14 @@ export class UiController {
   }
 
   private toggleEnding(open: boolean): void {
-    this.refs.endingOverlay.classList.toggle("hidden", !open);
+    if (open) {
+      showPanelWithTransition(this.refs.endingOverlay);
+    } else {
+      // Ending overlay closes via screen transition flow, so skip exit animation.
+      clearPanelTransition(this.refs.endingOverlay);
+      this.refs.endingOverlay.classList.add("hidden");
+    }
     if (!open) {
-      this.refs.endingOverlay.classList.remove("ending-overlay--enter");
       this.endingPanelMode = "normal";
       this.activeEndingPanelId = null;
       this.updateEndingPanelPrimaryButtonLabel();
@@ -1070,10 +1076,14 @@ export class UiController {
 
   private openEndingWithRise(): void {
     this.toggleEnding(true);
-    this.refs.endingOverlay.classList.remove("ending-overlay--enter");
-    // Force reflow so the rise animation restarts every game-over.
-    void this.refs.endingOverlay.offsetWidth;
-    this.refs.endingOverlay.classList.add("ending-overlay--enter");
+  }
+
+  private setOverlayOpen(overlay: HTMLElement, open: boolean): void {
+    if (open) {
+      showPanelWithTransition(overlay);
+      return;
+    }
+    hidePanelWithTransition(overlay);
   }
 
   private renderEndingPanel(endingId: string, mode: "normal" | "preview"): void {
