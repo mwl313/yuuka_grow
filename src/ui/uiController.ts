@@ -39,6 +39,7 @@ interface UiRefs {
   creditsModal: HTMLElement;
   guideModal: HTMLElement;
   endingOverlay: HTMLElement;
+  endingConditionOverlay: HTMLElement;
   btnStart: HTMLButtonElement;
   btnSettings: HTMLButtonElement;
   btnNickname: HTMLButtonElement;
@@ -67,6 +68,7 @@ interface UiRefs {
   btnLeaderSortThigh: HTMLButtonElement;
   btnLeaderBack: HTMLButtonElement;
   btnEndingBookBack: HTMLButtonElement;
+  btnEndingConditionClose: HTMLButtonElement;
   btnMiniLobby: HTMLButtonElement;
   btnMiniSound: HTMLButtonElement;
   hudDay: HTMLElement;
@@ -96,7 +98,9 @@ interface UiRefs {
   leaderboardBody: HTMLTableSectionElement;
   endingBookTitle: HTMLElement;
   endingBookProgress: HTMLElement;
-  endingBookBody: HTMLTableSectionElement;
+  endingBookBody: HTMLElement;
+  endingConditionTitle: HTMLElement;
+  endingConditionBody: HTMLElement;
   bgmRange: HTMLInputElement;
   sfxRange: HTMLInputElement;
   voiceRange: HTMLInputElement;
@@ -347,17 +351,13 @@ export class UiController {
             <h2 id="ending-book-title" class="font-title"></h2>
             <p id="ending-book-progress" class="ending-book-progress"></p>
             <div class="ending-book-table-wrap ui-panel">
-              <table class="ending-book-table">
-                <thead>
-                  <tr>
-                    <th id="ending-book-col-name"></th>
-                    <th id="ending-book-col-condition"></th>
-                    <th id="ending-book-col-achieved"></th>
-                    <th id="ending-book-col-view"></th>
-                  </tr>
-                </thead>
-                <tbody id="ending-book-body"></tbody>
-              </table>
+              <div class="endingdex-head">
+                <div id="ending-book-col-name" class="endingdex-head-cell endingdex-head-cell--name"></div>
+                <div id="ending-book-col-achieved" class="endingdex-head-cell"></div>
+                <div id="ending-book-col-condition" class="endingdex-head-cell"></div>
+                <div id="ending-book-col-desc" class="endingdex-head-cell"></div>
+              </div>
+              <div id="ending-book-body" class="endingdex-body"></div>
             </div>
             <button id="btn-ending-book-back" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
@@ -368,6 +368,14 @@ export class UiController {
             <h2 id="ending-title" class="font-title"></h2>
             <p id="ending-desc"></p>
             <button id="btn-continue" class="skin-button ui-btn ui-btn--primary font-title"></button>
+          </div>
+        </div>
+
+        <div id="ending-condition-overlay" class="overlay hidden">
+          <div class="skin-panel ui-panel modal-card panel-transition-card">
+            <h2 id="ending-condition-title" class="font-title"></h2>
+            <p id="ending-condition-body" class="ending-condition-body"></p>
+            <button id="btn-ending-condition-close" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </div>
 
@@ -472,6 +480,7 @@ export class UiController {
       creditsModal: pick("credits-modal"),
       guideModal: pick("guide-modal"),
       endingOverlay: pick("ending-overlay"),
+      endingConditionOverlay: pick("ending-condition-overlay"),
       btnStart: pick("btn-start"),
       btnSettings: pick("btn-settings"),
       btnNickname: pick("btn-nickname"),
@@ -500,6 +509,7 @@ export class UiController {
       btnLeaderSortThigh: pick("btn-leader-sort-thigh"),
       btnLeaderBack: pick("btn-leader-back"),
       btnEndingBookBack: pick("btn-ending-book-back"),
+      btnEndingConditionClose: pick("btn-ending-condition-close"),
       btnMiniLobby: pick("btn-mini-lobby"),
       btnMiniSound: pick("btn-mini-sound"),
       hudDay: pick("hud-day"),
@@ -530,6 +540,8 @@ export class UiController {
       endingBookTitle: pick("ending-book-title"),
       endingBookProgress: pick("ending-book-progress"),
       endingBookBody: pick("ending-book-body"),
+      endingConditionTitle: pick("ending-condition-title"),
+      endingConditionBody: pick("ending-condition-body"),
       bgmRange: pick("settings-bgm-range"),
       sfxRange: pick("settings-sfx-range"),
       voiceRange: pick("settings-voice-range"),
@@ -621,10 +633,11 @@ export class UiController {
     this.refs.btnLeaderBack.textContent = t("leaderboard.back");
     this.refs.endingBookTitle.textContent = t("endingDex.title");
     this.refs.btnEndingBookBack.textContent = t("endingBook.back");
-    this.setText("ending-book-col-name", t("endingBook.col.name"));
-    this.setText("ending-book-col-condition", t("endingBook.col.condition"));
-    this.setText("ending-book-col-achieved", t("endingBook.col.achieved"));
-    this.setText("ending-book-col-view", t("endingBook.col.view"));
+    this.setText("ending-book-col-name", t("endingDex.colName"));
+    this.setText("ending-book-col-achieved", t("endingDex.colAchieved"));
+    this.setText("ending-book-col-condition", t("endingDex.colCondition"));
+    this.setText("ending-book-col-desc", t("endingDex.colDesc"));
+    this.refs.btnEndingConditionClose.textContent = t("endingDex.btnClose");
 
     this.setText("settings-title", t("options.title"));
     this.setText("settings-bgm", t("settings.bgm"));
@@ -685,12 +698,7 @@ export class UiController {
   }
 
   private updateEndingBookButtonLabel(): void {
-    const { collected, total } = this.getEndingBookCounts();
-    this.refs.btnEndingBook.textContent = t("lobby.btnEndingBookWithProgress", {
-      label: t("lobby.btnEndingBook"),
-      collected: formatNumber(collected),
-      total: formatNumber(total),
-    });
+    this.refs.btnEndingBook.textContent = t("lobby.btnEndingBook");
   }
 
   private bindEvents(): void {
@@ -710,6 +718,7 @@ export class UiController {
       this.refs.btnCredits,
       this.refs.btnGuide,
       this.refs.btnEndingBook,
+      this.refs.btnEndingConditionClose,
       this.refs.btnCloseSettings,
       this.refs.btnCloseCredits,
       this.refs.btnCloseGuide,
@@ -745,6 +754,9 @@ export class UiController {
     this.refs.btnGuide.addEventListener("click", () => this.openGuideModal(true));
     this.refs.btnEndingBook.addEventListener("click", () => {
       void this.openEndingBook();
+    });
+    this.refs.btnEndingConditionClose.addEventListener("click", () => {
+      this.setOverlayOpen(this.refs.endingConditionOverlay, false);
     });
     this.refs.btnCloseSettings.addEventListener("click", () => this.openSettings(false));
     this.refs.btnCloseCredits.addEventListener("click", () => this.openCreditsModal(false));
@@ -1515,10 +1527,11 @@ export class UiController {
       const entry = this.endingCollection[ending.id];
       const unlocked = Boolean(entry);
       const showNewBadge = unlocked && (entry.isNew || this.endingDexSessionNewIds.has(ending.id));
-      const row = document.createElement("tr");
-      row.className = unlocked ? "ending-book-row" : "ending-book-row ending-book-row--locked";
+      const row = document.createElement("div");
+      row.className = unlocked ? "endingdex-row" : "endingdex-row endingdex-row--locked";
 
-      const nameCell = document.createElement("td");
+      const nameCell = document.createElement("div");
+      nameCell.className = "endingdex-cell endingdex-cell--name";
       if (unlocked) {
         const nameWrap = document.createElement("span");
         nameWrap.className = "ending-book-name";
@@ -1531,27 +1544,32 @@ export class UiController {
           nameCell.append(badge);
         }
       } else {
-        nameCell.textContent = t("endingBook.locked");
+        nameCell.textContent = t("endingDex.unknown");
       }
 
-      const conditionCell = document.createElement("td");
-      if (unlocked) {
-        const condition = t(`ending.${ending.id}.condition`);
-        conditionCell.textContent =
-          condition.startsWith("[[missing:") ? getEndingCondition(ending.id, getLanguage()) : condition;
-      } else {
-        conditionCell.textContent = t("endingBook.locked");
-      }
-
-      const achievedCell = document.createElement("td");
+      const achievedCell = document.createElement("div");
+      achievedCell.className = "endingdex-cell endingdex-cell--achieved";
       achievedCell.textContent = unlocked ? t("endingDex.achieved") : t("endingDex.notAchieved");
-      achievedCell.className = unlocked ? "ending-book-achieved is-achieved" : "ending-book-achieved is-missed";
+      achievedCell.classList.add("ending-book-achieved");
+      achievedCell.classList.add(unlocked ? "is-achieved" : "is-missed");
 
-      const actionCell = document.createElement("td");
+      const conditionCell = document.createElement("div");
+      conditionCell.className = "endingdex-cell endingdex-cell--button endingdex-cell--condition";
+      const conditionButton = document.createElement("button");
+      conditionButton.type = "button";
+      conditionButton.className = "skin-button ui-btn ui-btn--secondary font-title ending-book-view-button";
+      conditionButton.textContent = t("endingDex.btnView");
+      conditionButton.addEventListener("click", () => {
+        this.openEndingConditionPopup(ending.id, unlocked);
+      });
+      conditionCell.append(conditionButton);
+
+      const actionCell = document.createElement("div");
+      actionCell.className = "endingdex-cell endingdex-cell--button endingdex-cell--desc";
       const viewButton = document.createElement("button");
       viewButton.type = "button";
       viewButton.className = "skin-button ui-btn ui-btn--secondary font-title ending-book-view-button";
-      viewButton.textContent = unlocked ? t("endingDex.view") : "🔒";
+      viewButton.textContent = unlocked ? t("endingDex.btnView") : "🔒";
       viewButton.disabled = !unlocked;
       if (unlocked) {
         viewButton.addEventListener("click", () => {
@@ -1561,9 +1579,17 @@ export class UiController {
       }
       actionCell.append(viewButton);
 
-      row.append(nameCell, conditionCell, achievedCell, actionCell);
+      row.append(nameCell, achievedCell, conditionCell, actionCell);
       this.refs.endingBookBody.append(row);
     }
+  }
+
+  private openEndingConditionPopup(endingId: string, unlocked: boolean): void {
+    this.refs.endingConditionTitle.textContent = unlocked ? t(`ending.${endingId}.title`) : t("endingDex.unknown");
+    const condition = t(`ending.${endingId}.condition`);
+    this.refs.endingConditionBody.textContent =
+      condition.startsWith("[[missing:") ? getEndingCondition(endingId, getLanguage()) : condition;
+    this.setOverlayOpen(this.refs.endingConditionOverlay, true);
   }
 
   private snapshotAndClearEndingDexNewFlags(): void {
