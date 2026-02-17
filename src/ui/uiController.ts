@@ -163,7 +163,7 @@ function createRunId(): string {
 
 const TURN_SLOT_KEYS = ["morning", "noon", "evening"] as const;
 const ACTION_INPUT_COOLDOWN_MS = 300;
-const ENDING_TRANSITION_DELAY_MS = 200;
+const ENDING_TRANSITION_DELAY_MS = 700;
 
 export class UiController {
   private readonly root: HTMLElement;
@@ -1041,11 +1041,7 @@ export class UiController {
       await new Promise<void>((resolve) => {
         window.setTimeout(resolve, ENDING_TRANSITION_DELAY_MS);
       });
-      await this.transitionManager.transitionTo("ending", {
-        type: "shutter",
-        freezeFrame: false,
-        onMid: () => this.toggleEnding(true),
-      });
+      this.openEndingWithRise();
     })();
   }
 
@@ -1062,6 +1058,7 @@ export class UiController {
   private toggleEnding(open: boolean): void {
     this.refs.endingOverlay.classList.toggle("hidden", !open);
     if (!open) {
+      this.refs.endingOverlay.classList.remove("ending-overlay--enter");
       this.endingPanelMode = "normal";
       this.activeEndingPanelId = null;
       this.updateEndingPanelPrimaryButtonLabel();
@@ -1069,6 +1066,14 @@ export class UiController {
     this.refs.btnWork.disabled = open;
     this.refs.btnEat.disabled = open;
     this.refs.btnGuest.disabled = open;
+  }
+
+  private openEndingWithRise(): void {
+    this.toggleEnding(true);
+    this.refs.endingOverlay.classList.remove("ending-overlay--enter");
+    // Force reflow so the rise animation restarts every game-over.
+    void this.refs.endingOverlay.offsetWidth;
+    this.refs.endingOverlay.classList.add("ending-overlay--enter");
   }
 
   private renderEndingPanel(endingId: string, mode: "normal" | "preview"): void {

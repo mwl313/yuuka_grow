@@ -10,6 +10,7 @@ import {
   BGM_GAME_MID_MAX_STAGE,
   BGM_HARD_SWITCH_CROSSFADE_MS,
   BGM_MAX_LOAD_RETRIES,
+  BGM_OUTPUT_ATTENUATION,
 } from "../core/constants";
 
 type BgmCategory = (typeof BGM_CATEGORIES)[number];
@@ -434,7 +435,7 @@ export class BgmManager {
   }
 
   private effectiveVolume(): number {
-    return this.masterMuted ? 0 : this.bgmVolume;
+    return this.masterMuted ? 0 : this.bgmVolume * BGM_OUTPUT_ATTENUATION;
   }
 
   private applyVolumes(): void {

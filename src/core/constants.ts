@@ -219,6 +219,7 @@ export const BGM_CATEGORIES = [
 export const BGM_DEFAULT_CROSSFADE_MS = 800;
 export const BGM_HARD_SWITCH_CROSSFADE_MS = 400;
 export const BGM_CONTEXT_GAP_MS = 100;
+export const BGM_OUTPUT_ATTENUATION = 0.85;
 export const BGM_MAX_LOAD_RETRIES = 3;
 export const BGM_GAME_EARLY_MAX_STAGE = 10;
 export const BGM_GAME_MID_MAX_STAGE = 17;
