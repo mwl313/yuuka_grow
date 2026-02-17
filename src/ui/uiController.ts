@@ -2,7 +2,16 @@ import { buildShareUrl, fetchLeaderboard, submitRun } from "../api/leaderboardAp
 import type { LeaderboardItem, LeaderboardSort, RankEntry } from "../api/leaderboardApi";
 import { BgmManager } from "../audio/bgmManager";
 import { applyEat, applyGuest, applyWork } from "../core/actions";
-import { APP_VERSION, AUTHOR_NAME, DEFAULT_NICKNAME, IP_LABEL, VOLUME_STEP } from "../core/constants";
+import {
+  APP_VERSION,
+  ASSET_KEYS_GIANT_BG,
+  AUTHOR_NAME,
+  DEFAULT_NICKNAME,
+  GIANT_TRIGGER_STAGE_INTERVAL,
+  GIANT_TRIGGER_STAGE_START,
+  IP_LABEL,
+  VOLUME_STEP,
+} from "../core/constants";
 import { checkImmediateBankrupt, toBaseEndCategory } from "../core/endings";
 import { ENDING_DEFS, selectEnding } from "../core/endingsTable";
 import { decodeLog } from "../core/logger";
@@ -25,6 +34,7 @@ import { getEndingCondition, getEndingTitle } from "../shared/endingMeta";
 import { UiAnimController } from "./anim/uiAnimController";
 import { clearPanelTransition, hidePanelWithTransition, showPanelWithTransition } from "./transition/panelTransition";
 import { TransitionManager } from "./transition/transitionManager";
+import { hapticGameOver, hapticLobbyTap, hapticStageBgTransition, hapticStageUp } from "./haptics";
 
 type ScreenId = "lobby" | "game" | "score" | "leaderboard" | "endingBook";
 
@@ -201,6 +211,9 @@ export class UiController {
   private endingPanelMode: "normal" | "preview" = "normal";
   private activeEndingPanelId: string | null = null;
   private endingDexSessionNewIds = new Set<string>();
+  private lastHapticStage: number | null = null;
+  private lastHapticGiantBgIndex: number | null = null;
+  private hasRunEndHapticFired = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -867,6 +880,7 @@ export class UiController {
   }
 
   private startGame(): void {
+    hapticLobbyTap();
     void this.bgmManager.unlock();
     this.resetForNewRun();
     this.openAbandonConfirm(false);
@@ -888,6 +902,10 @@ export class UiController {
   private resetForNewRun(): void {
     this.uiAnimController.forceFinalizeAll("reset");
     this.state = createInitialState();
+    const stage = getStage(this.state.thighCm);
+    this.lastHapticStage = stage;
+    this.lastHapticGiantBgIndex = this.getGiantBgIndexForStage(stage);
+    this.hasRunEndHapticFired = false;
     this.latestResult = null;
     this.uploadedMeta = null;
     this.currentRunId = createRunId();
@@ -905,6 +923,9 @@ export class UiController {
   }
 
   private openNicknameModal(open: boolean): void {
+    if (open && this.activeScreen === "lobby") {
+      hapticLobbyTap();
+    }
     this.setOverlayOpen(this.refs.nicknameModal, open);
     if (open) {
       this.refs.nicknameInput.value = this.settings.nickname;
@@ -914,10 +935,16 @@ export class UiController {
   }
 
   private openCreditsModal(open: boolean): void {
+    if (open && this.activeScreen === "lobby") {
+      hapticLobbyTap();
+    }
     this.setOverlayOpen(this.refs.creditsModal, open);
   }
 
   private openGuideModal(open: boolean): void {
+    if (open && this.activeScreen === "lobby") {
+      hapticLobbyTap();
+    }
     this.setOverlayOpen(this.refs.guideModal, open);
   }
 
@@ -972,6 +999,7 @@ export class UiController {
   }
 
   private async openLeaderboard(): Promise<void> {
+    hapticLobbyTap();
     await this.transitionManager.transitionTo("leaderboard", {
       type: "slide",
       direction: "left",
@@ -981,6 +1009,7 @@ export class UiController {
   }
 
   private async openEndingBook(): Promise<void> {
+    hapticLobbyTap();
     this.snapshotAndClearEndingDexNewFlags();
     this.renderEndingBook();
     await this.transitionManager.transitionTo("endingBook", {
@@ -1056,6 +1085,10 @@ export class UiController {
     this.renderEndingPanel(finalizedRun.endingId, "normal");
     const preShakeTarget = this.refs.game.querySelector<HTMLElement>(".game-main-card") ?? this.refs.game;
     void (async () => {
+      if (!this.hasRunEndHapticFired) {
+        this.hasRunEndHapticFired = true;
+        hapticGameOver();
+      }
       await this.transitionManager.playPreShake(preShakeTarget, 260);
       await new Promise<void>((resolve) => {
         window.setTimeout(resolve, ENDING_TRANSITION_DELAY_MS);
@@ -1137,8 +1170,28 @@ export class UiController {
     this.renderLogs(forceLogRefresh);
     this.renderer?.render(this.state);
     if (this.activeScreen === "game") {
+      const giantBgIndex = this.getGiantBgIndexForStage(stage);
+      const stageIncreased = this.lastHapticStage !== null && stage > this.lastHapticStage;
+      const bgTransitioned =
+        this.lastHapticGiantBgIndex !== null &&
+        giantBgIndex > this.lastHapticGiantBgIndex;
+
+      if (bgTransitioned) {
+        hapticStageBgTransition();
+      } else if (stageIncreased) {
+        hapticStageUp();
+      }
+
+      this.lastHapticStage = stage;
+      this.lastHapticGiantBgIndex = giantBgIndex;
       this.updateBgmContext(stage);
     }
+  }
+
+  private getGiantBgIndexForStage(stage: number): number {
+    if (stage < GIANT_TRIGGER_STAGE_START) return 0;
+    const rank = Math.floor((stage - GIANT_TRIGGER_STAGE_START) / GIANT_TRIGGER_STAGE_INTERVAL) + 1;
+    return Math.min(rank, ASSET_KEYS_GIANT_BG.length);
   }
 
   private updateBgmContext(stageOverride?: number): void {
