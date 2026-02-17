@@ -2,7 +2,8 @@ import { buildShareUrl, fetchLeaderboard, submitRun } from "../api/leaderboardAp
 import type { LeaderboardItem, LeaderboardSort, RankEntry } from "../api/leaderboardApi";
 import { applyEat, applyGuest, applyWork } from "../core/actions";
 import { APP_VERSION, AUTHOR_NAME, DEFAULT_NICKNAME, IP_LABEL, VOLUME_STEP } from "../core/constants";
-import { checkImmediateBankrupt } from "../core/endings";
+import { checkImmediateBankrupt, toBaseEndCategory } from "../core/endings";
+import { ENDING_DEFS, selectEnding } from "../core/endingsTable";
 import { decodeLog } from "../core/logger";
 import { defaultRng } from "../core/rng";
 import { getStage } from "../core/stage";
@@ -10,18 +11,21 @@ import { createInitialState } from "../core/state";
 import type { GameState, LanguageCode, RunResult, SaveData, Settings, StepResult } from "../core/types";
 import { formatNumber, getLanguage, onLanguageChange, setLanguage, t } from "../i18n";
 import { YuukaRenderer } from "../render/yuukaRenderer";
+import { getCollection, hasEnding, recordEnding, type EndingCollectionMap } from "../storage/endingCollection";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
+import { getEndingTitle } from "../shared/endingTitles";
 import { UiAnimController } from "./anim/uiAnimController";
 import { TransitionManager } from "./transition/transitionManager";
 
-type ScreenId = "lobby" | "game" | "score" | "leaderboard";
+type ScreenId = "lobby" | "game" | "score" | "leaderboard" | "endingBook";
 
 interface UiRefs {
   lobby: HTMLElement;
   game: HTMLElement;
   score: HTMLElement;
   leaderboard: HTMLElement;
+  endingBook: HTMLElement;
   settingsModal: HTMLElement;
   nicknameModal: HTMLElement;
   creditsModal: HTMLElement;
@@ -33,6 +37,7 @@ interface UiRefs {
   btnLeaderboard: HTMLButtonElement;
   btnCredits: HTMLButtonElement;
   btnGuide: HTMLButtonElement;
+  btnEndingBook: HTMLButtonElement;
   btnCloseSettings: HTMLButtonElement;
   btnCloseCredits: HTMLButtonElement;
   btnCloseGuide: HTMLButtonElement;
@@ -53,6 +58,8 @@ interface UiRefs {
   btnLeaderSortCredit: HTMLButtonElement;
   btnLeaderSortThigh: HTMLButtonElement;
   btnLeaderBack: HTMLButtonElement;
+  btnEndingBookBack: HTMLButtonElement;
+  btnEndingBookDetailClose: HTMLButtonElement;
   btnMiniLobby: HTMLButtonElement;
   btnMiniSound: HTMLButtonElement;
   hudDay: HTMLElement;
@@ -80,6 +87,12 @@ interface UiRefs {
   lobbyNickname: HTMLElement;
   leaderboardStatus: HTMLElement;
   leaderboardBody: HTMLTableSectionElement;
+  endingBookTitle: HTMLElement;
+  endingBookProgress: HTMLElement;
+  endingBookList: HTMLUListElement;
+  endingBookDetailModal: HTMLElement;
+  endingBookDetailTitle: HTMLElement;
+  endingBookDetailDesc: HTMLElement;
   bgmRange: HTMLInputElement;
   sfxRange: HTMLInputElement;
   voiceRange: HTMLInputElement;
@@ -165,6 +178,7 @@ export class UiController {
   private leaderboardItems: LeaderboardItem[] = [];
   private leaderboardLoading = false;
   private leaderboardError: string | null = null;
+  private endingCollection: EndingCollectionMap = {};
   private uiAnimController!: UiAnimController;
   private readonly transitionManager = new TransitionManager();
   private renderedRawLogs: string[] = [];
@@ -175,6 +189,7 @@ export class UiController {
     this.root.innerHTML = this.buildLayout();
     this.refs = this.collectRefs();
     this.save = ensureValidOngoingState(loadSaveData());
+    this.endingCollection = getCollection();
     this.state = this.save.state;
     this.settings = loadSettings();
     this.initUiAnimators();
@@ -208,6 +223,7 @@ export class UiController {
                 <button id="btn-leaderboard" class="skin-button font-title"></button>
                 <button id="btn-credits" class="skin-button font-title"></button>
                 <button id="btn-guide" class="skin-button font-title"></button>
+                <button id="btn-ending-book" class="skin-button font-title"></button>
               </div>
             </div>
             <p id="lobby-disclaimer" class="lobby-disclaimer"></p>
@@ -311,6 +327,15 @@ export class UiController {
           </div>
         </section>
 
+        <section id="screen-ending-book" class="screen">
+          <div class="skin-panel score-card ending-book-card">
+            <h2 id="ending-book-title" class="font-title"></h2>
+            <p id="ending-book-progress" class="ending-book-progress"></p>
+            <ul id="ending-book-list" class="ending-book-list"></ul>
+            <button id="btn-ending-book-back" class="skin-button font-title"></button>
+          </div>
+        </section>
+
         <div id="ending-overlay" class="overlay hidden">
           <div class="skin-panel modal-card">
             <h2 id="ending-title" class="font-title"></h2>
@@ -398,6 +423,14 @@ export class UiController {
             </div>
           </div>
         </div>
+
+        <div id="ending-book-detail-modal" class="overlay hidden">
+          <div class="skin-panel modal-card confirm-card">
+            <h2 id="ending-book-detail-title" class="font-title"></h2>
+            <p id="ending-book-detail-desc" class="modal-temp-body"></p>
+            <button id="btn-ending-book-detail-close" class="skin-button font-title"></button>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -414,6 +447,7 @@ export class UiController {
       game: pick("screen-game"),
       score: pick("screen-score"),
       leaderboard: pick("screen-leaderboard"),
+      endingBook: pick("screen-ending-book"),
       settingsModal: pick("settings-modal"),
       nicknameModal: pick("nickname-modal"),
       creditsModal: pick("credits-modal"),
@@ -425,6 +459,7 @@ export class UiController {
       btnLeaderboard: pick("btn-leaderboard"),
       btnCredits: pick("btn-credits"),
       btnGuide: pick("btn-guide"),
+      btnEndingBook: pick("btn-ending-book"),
       btnCloseSettings: pick("btn-close-settings"),
       btnCloseCredits: pick("btn-close-credits"),
       btnCloseGuide: pick("btn-close-guide"),
@@ -445,6 +480,8 @@ export class UiController {
       btnLeaderSortCredit: pick("btn-leader-sort-credit"),
       btnLeaderSortThigh: pick("btn-leader-sort-thigh"),
       btnLeaderBack: pick("btn-leader-back"),
+      btnEndingBookBack: pick("btn-ending-book-back"),
+      btnEndingBookDetailClose: pick("btn-ending-book-detail-close"),
       btnMiniLobby: pick("btn-mini-lobby"),
       btnMiniSound: pick("btn-mini-sound"),
       hudDay: pick("hud-day"),
@@ -472,6 +509,12 @@ export class UiController {
       lobbyNickname: pick("lobby-nickname"),
       leaderboardStatus: pick("leaderboard-status"),
       leaderboardBody: pick("leaderboard-body"),
+      endingBookTitle: pick("ending-book-title"),
+      endingBookProgress: pick("ending-book-progress"),
+      endingBookList: pick("ending-book-list"),
+      endingBookDetailModal: pick("ending-book-detail-modal"),
+      endingBookDetailTitle: pick("ending-book-detail-title"),
+      endingBookDetailDesc: pick("ending-book-detail-desc"),
       bgmRange: pick("settings-bgm-range"),
       sfxRange: pick("settings-sfx-range"),
       voiceRange: pick("settings-voice-range"),
@@ -537,6 +580,7 @@ export class UiController {
     this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
     this.refs.btnCredits.textContent = t("lobby.btnCredits");
     this.refs.btnGuide.textContent = t("lobby.btnGuide");
+    this.refs.btnEndingBook.textContent = t("lobby.btnEndingBook");
     this.refs.hudSlotMorningLabel.textContent = t("turn.morning");
     this.refs.hudSlotNoonLabel.textContent = t("turn.noon");
     this.refs.hudSlotEveningLabel.textContent = t("turn.evening");
@@ -560,6 +604,9 @@ export class UiController {
     this.refs.btnLeaderSortCredit.textContent = t("leaderboard.sort.credit");
     this.refs.btnLeaderSortThigh.textContent = t("leaderboard.sort.thigh");
     this.refs.btnLeaderBack.textContent = t("leaderboard.back");
+    this.refs.endingBookTitle.textContent = t("endingBook.title");
+    this.refs.btnEndingBookBack.textContent = t("endingBook.back");
+    this.refs.btnEndingBookDetailClose.textContent = t("settings.close");
 
     this.setText("settings-title", t("options.title"));
     this.setText("settings-bgm", t("settings.bgm"));
@@ -600,6 +647,7 @@ export class UiController {
     this.updateSoundToggleUi();
     this.updateScoreMeta();
     this.renderLeaderboard();
+    this.renderEndingBook();
   }
 
   private bindEvents(): void {
@@ -610,6 +658,7 @@ export class UiController {
       this.refs.btnLeaderboard,
       this.refs.btnCredits,
       this.refs.btnGuide,
+      this.refs.btnEndingBook,
       this.refs.btnCloseSettings,
       this.refs.btnCloseCredits,
       this.refs.btnCloseGuide,
@@ -628,6 +677,8 @@ export class UiController {
       this.refs.btnLeaderSortCredit,
       this.refs.btnLeaderSortThigh,
       this.refs.btnLeaderBack,
+      this.refs.btnEndingBookBack,
+      this.refs.btnEndingBookDetailClose,
       this.refs.btnMiniLobby,
       this.refs.btnMiniSound,
       this.refs.btnConfirmYes,
@@ -642,6 +693,9 @@ export class UiController {
     });
     this.refs.btnCredits.addEventListener("click", () => this.openCreditsModal(true));
     this.refs.btnGuide.addEventListener("click", () => this.openGuideModal(true));
+    this.refs.btnEndingBook.addEventListener("click", () => {
+      void this.openEndingBook();
+    });
     this.refs.btnCloseSettings.addEventListener("click", () => this.openSettings(false));
     this.refs.btnCloseCredits.addEventListener("click", () => this.openCreditsModal(false));
     this.refs.btnCloseGuide.addEventListener("click", () => this.openGuideModal(false));
@@ -691,6 +745,10 @@ export class UiController {
     this.refs.btnLeaderBack.addEventListener("click", () => {
       void this.transitionToLobby();
     });
+    this.refs.btnEndingBookBack.addEventListener("click", () => {
+      void this.transitionToLobby();
+    });
+    this.refs.btnEndingBookDetailClose.addEventListener("click", () => this.openEndingBookDetail(false));
     this.refs.btnMiniLobby.addEventListener("click", () => this.openAbandonConfirm(true));
     this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
     this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
@@ -713,6 +771,11 @@ export class UiController {
     this.refs.guideModal.addEventListener("click", (event) => {
       if (event.target === this.refs.guideModal) {
         this.openGuideModal(false);
+      }
+    });
+    this.refs.endingBookDetailModal.addEventListener("click", (event) => {
+      if (event.target === this.refs.endingBookDetailModal) {
+        this.openEndingBookDetail(false);
       }
     });
 
@@ -841,6 +904,7 @@ export class UiController {
     this.refs.game.classList.toggle("active", screen === "game");
     this.refs.score.classList.toggle("active", screen === "score");
     this.refs.leaderboard.classList.toggle("active", screen === "leaderboard");
+    this.refs.endingBook.classList.toggle("active", screen === "endingBook");
   }
 
   private async openLeaderboard(): Promise<void> {
@@ -850,6 +914,15 @@ export class UiController {
       onMid: () => this.showScreen("leaderboard"),
     });
     await this.loadLeaderboard();
+  }
+
+  private async openEndingBook(): Promise<void> {
+    this.renderEndingBook();
+    await this.transitionManager.transitionTo("endingBook", {
+      type: "slide",
+      direction: "left",
+      onMid: () => this.showScreen("endingBook"),
+    });
   }
 
   private ensureRenderer(): void {
@@ -885,7 +958,23 @@ export class UiController {
   }
 
   private onEnded(runResult: RunResult): void {
-    this.latestResult = runResult;
+    const endedAt = new Date(runResult.endedAtIso);
+    const safeEndedAt = Number.isNaN(endedAt.getTime()) ? new Date() : endedAt;
+    const selected = selectEnding(
+      this.state,
+      toBaseEndCategory(runResult.endingCategory),
+      safeEndedAt,
+      (endingId) => hasEnding(endingId, this.endingCollection),
+    );
+    const finalizedRun: RunResult = {
+      ...runResult,
+      endedAtIso: safeEndedAt.toISOString(),
+      endingCategory: selected.category,
+      endingId: selected.id,
+    };
+    this.endingCollection = recordEnding(finalizedRun.endingId, finalizedRun.endedAtIso, this.endingCollection);
+    this.renderEndingBook();
+    this.latestResult = finalizedRun;
     this.uploadedMeta = null;
     this.isUploading = false;
     this.openUploadResultPopup(false);
@@ -894,11 +983,11 @@ export class UiController {
         ...this.save,
         state: this.state,
       },
-      runResult,
+      finalizedRun,
     );
     saveData(this.save);
-    this.refs.endingTitle.textContent = t(`ending.${runResult.endingId}.title`);
-    this.refs.endingDesc.textContent = t(`ending.${runResult.endingId}.desc`);
+    this.refs.endingTitle.textContent = t(`ending.${finalizedRun.endingId}.title`);
+    this.refs.endingDesc.textContent = t(`ending.${finalizedRun.endingId}.desc`);
     const preShakeTarget = this.refs.game.querySelector<HTMLElement>(".game-main-card") ?? this.refs.game;
     void (async () => {
       await this.transitionManager.playPreShake(preShakeTarget, 260);
@@ -914,6 +1003,7 @@ export class UiController {
   }
 
   private transitionToLobby(): Promise<void> {
+    this.openEndingBookDetail(false);
     return this.transitionManager.transitionTo("lobby", {
       type: "slide",
       direction: "right",
@@ -1151,7 +1241,7 @@ export class UiController {
       const response = await submitRun({
         runId: this.currentRunId,
         nickname: this.settings.nickname,
-        endingCategory: this.latestResult.endingId,
+        endingCategory: this.latestResult.endingCategory,
         endingId: this.latestResult.endingId,
         survivalDays: this.latestResult.dayReached,
         finalCredits: Math.round(this.latestResult.finalMoney),
@@ -1285,6 +1375,50 @@ export class UiController {
     }
   }
 
+  private renderEndingBook(): void {
+    this.refs.endingBookList.innerHTML = "";
+    const total = ENDING_DEFS.length;
+    let collected = 0;
+
+    for (const ending of ENDING_DEFS) {
+      const item = document.createElement("li");
+      item.className = "ending-book-item";
+      const unlocked = hasEnding(ending.id, this.endingCollection);
+      if (unlocked) {
+        collected += 1;
+      }
+      item.textContent = unlocked ? t(ending.titleKey) : t("endingBook.locked");
+      item.classList.toggle("locked", !unlocked);
+      item.addEventListener("click", () => this.openEndingBookDetail(true, ending.id, unlocked));
+      this.refs.endingBookList.append(item);
+    }
+
+    this.refs.endingBookProgress.textContent = t("endingBook.progress", {
+      collected: formatNumber(collected),
+      total: formatNumber(total),
+    });
+  }
+
+  private openEndingBookDetail(open: boolean, endingId?: string, unlocked = false): void {
+    this.refs.endingBookDetailModal.classList.toggle("hidden", !open);
+    if (!open) return;
+    if (!endingId) {
+      this.refs.endingBookDetailTitle.textContent = t("endingBook.locked");
+      this.refs.endingBookDetailDesc.textContent = t("endingBook.locked");
+      return;
+    }
+
+    const def = ENDING_DEFS.find((item) => item.id === endingId);
+    if (!def || !unlocked) {
+      this.refs.endingBookDetailTitle.textContent = t("endingBook.locked");
+      this.refs.endingBookDetailDesc.textContent = t("endingBook.locked");
+      return;
+    }
+
+    this.refs.endingBookDetailTitle.textContent = t(def.titleKey);
+    this.refs.endingBookDetailDesc.textContent = t(def.descKey);
+  }
+
   private createLeaderboardCell(value: string): HTMLTableCellElement {
     const cell = document.createElement("td");
     cell.textContent = value;
@@ -1292,10 +1426,7 @@ export class UiController {
   }
 
   private getEndingLabel(endingId: string): string {
-    const key = `ending.${endingId}.title`;
-    const translated = t(key);
-    if (!translated.startsWith("[[missing:")) return translated;
-    return endingId;
+    return getEndingTitle(endingId, getLanguage());
   }
 
   private formatSubmittedDate(iso: string): string {

@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "i18n:sync:endings": "node --loader ts-node/esm scripts/syncEndingTitles.ts",
+    "i18n:sync": "npm run i18n:sync:endings",
     "build:guests-manifest": "node scripts/buildGuestsManifest.mjs",
     "build:food-manifest": "node scripts/buildActionManifest.mjs food",
     "build:work-manifest": "node scripts/buildActionManifest.mjs work",
     "build:assets-manifests": "npm run build:guests-manifest && npm run build:food-manifest && npm run build:work-manifest",
+    "prebuild": "npm run i18n:sync:endings",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
@@ -17,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "ts-node": "^10.9.2",
     "typescript": "~5.9.3",
     "vite": "^7.3.1"
   }

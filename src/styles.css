@@ -795,6 +795,45 @@ textarea {
   gap: 10px;
 }
 
+.ending-book-card {
+  display: grid;
+  gap: 10px;
+}
+
+.ending-book-progress {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.ending-book-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  max-height: 58svh;
+  overflow: auto;
+  border: 1px solid rgba(96, 122, 150, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.ending-book-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(96, 122, 150, 0.2);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.ending-book-item:last-child {
+  border-bottom: 0;
+}
+
+.ending-book-item.locked {
+  opacity: 0.75;
+}
+
 .leaderboard-sort {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

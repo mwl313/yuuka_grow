@@ -6,6 +6,7 @@ import {
   SHARE_PARAM_STRESS,
   SHARE_PARAM_THIGH,
 } from "../core/constants";
+import { ENDING_DEFS } from "../core/endingsTable";
 import type { EndingId, RunResult } from "../core/types";
 
 interface ShareResult {
@@ -16,7 +17,7 @@ interface ShareResult {
   stress: number;
 }
 
-const validEndings: EndingId[] = ["normal", "bankrupt", "stress"];
+const validEndings = new Set<EndingId>(["normal", "bankrupt", "stress", ...ENDING_DEFS.map((item) => item.id)]);
 
 export function buildShareRelativeUrl(run: RunResult): string {
   const params = new URLSearchParams({
@@ -50,7 +51,7 @@ export function parseShareQuery(search: string): ShareResult | null {
   if (!Number.isFinite(day)) return null;
   if (!Number.isFinite(money)) return null;
   if (!Number.isFinite(stress)) return null;
-  if (!ending || !validEndings.includes(ending as EndingId)) return null;
+  if (!ending || !validEndings.has(ending as EndingId)) return null;
 
   return {
     thigh: Math.round(thigh),

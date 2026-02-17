@@ -8,7 +8,28 @@ import {
   STRESS_MIN,
 } from "./constants";
 import { clamp } from "./clamp";
-import type { GameState } from "./types";
+import type { ActionCounts, GameState, GuestCounts } from "./types";
+
+function createInitialActionCounts(): ActionCounts {
+  return {
+    work: 0,
+    eat: 0,
+    guest: 0,
+    totalActions: 0,
+  };
+}
+
+function createInitialGuestCounts(): GuestCounts {
+  return {
+    aris: 0,
+    koyuki: 0,
+    maki: 0,
+    momoi: 0,
+    noa: 0,
+    rio: 0,
+    sensei: 0,
+  };
+}
 
 export function createInitialState(): GameState {
   return {
@@ -20,6 +41,10 @@ export function createInitialState(): GameState {
     stress100Days: 0,
     ateToday: false,
     noaWorkCharges: 0,
+    actionCounts: createInitialActionCounts(),
+    guestCounts: createInitialGuestCounts(),
+    koyukiLossCount: 0,
+    eatSlotsMask: 0,
     logs: [],
   };
 }
@@ -52,6 +77,70 @@ export function sanitizeState(input: unknown): GameState {
     typeof source.noaWorkCharges === "number" && source.noaWorkCharges >= 0
       ? Math.floor(source.noaWorkCharges)
       : fallback.noaWorkCharges;
+  const actionCountsSource =
+    source.actionCounts && typeof source.actionCounts === "object"
+      ? (source.actionCounts as Partial<ActionCounts>)
+      : {};
+  const actionCounts: ActionCounts = {
+    work:
+      typeof actionCountsSource.work === "number" && actionCountsSource.work >= 0
+        ? Math.floor(actionCountsSource.work)
+        : fallback.actionCounts.work,
+    eat:
+      typeof actionCountsSource.eat === "number" && actionCountsSource.eat >= 0
+        ? Math.floor(actionCountsSource.eat)
+        : fallback.actionCounts.eat,
+    guest:
+      typeof actionCountsSource.guest === "number" && actionCountsSource.guest >= 0
+        ? Math.floor(actionCountsSource.guest)
+        : fallback.actionCounts.guest,
+    totalActions:
+      typeof actionCountsSource.totalActions === "number" && actionCountsSource.totalActions >= 0
+        ? Math.floor(actionCountsSource.totalActions)
+        : fallback.actionCounts.totalActions,
+  };
+  const guestCountsSource =
+    source.guestCounts && typeof source.guestCounts === "object"
+      ? (source.guestCounts as Partial<GuestCounts>)
+      : {};
+  const guestCounts: GuestCounts = {
+    aris:
+      typeof guestCountsSource.aris === "number" && guestCountsSource.aris >= 0
+        ? Math.floor(guestCountsSource.aris)
+        : fallback.guestCounts.aris,
+    koyuki:
+      typeof guestCountsSource.koyuki === "number" && guestCountsSource.koyuki >= 0
+        ? Math.floor(guestCountsSource.koyuki)
+        : fallback.guestCounts.koyuki,
+    maki:
+      typeof guestCountsSource.maki === "number" && guestCountsSource.maki >= 0
+        ? Math.floor(guestCountsSource.maki)
+        : fallback.guestCounts.maki,
+    momoi:
+      typeof guestCountsSource.momoi === "number" && guestCountsSource.momoi >= 0
+        ? Math.floor(guestCountsSource.momoi)
+        : fallback.guestCounts.momoi,
+    noa:
+      typeof guestCountsSource.noa === "number" && guestCountsSource.noa >= 0
+        ? Math.floor(guestCountsSource.noa)
+        : fallback.guestCounts.noa,
+    rio:
+      typeof guestCountsSource.rio === "number" && guestCountsSource.rio >= 0
+        ? Math.floor(guestCountsSource.rio)
+        : fallback.guestCounts.rio,
+    sensei:
+      typeof guestCountsSource.sensei === "number" && guestCountsSource.sensei >= 0
+        ? Math.floor(guestCountsSource.sensei)
+        : fallback.guestCounts.sensei,
+  };
+  const koyukiLossCount =
+    typeof source.koyukiLossCount === "number" && source.koyukiLossCount >= 0
+      ? Math.floor(source.koyukiLossCount)
+      : fallback.koyukiLossCount;
+  const eatSlotsMask =
+    typeof source.eatSlotsMask === "number" && source.eatSlotsMask >= 0
+      ? Math.floor(source.eatSlotsMask)
+      : fallback.eatSlotsMask;
   const logs = Array.isArray(source.logs)
     ? source.logs.filter((line): line is string => typeof line === "string")
     : fallback.logs;
@@ -65,6 +154,10 @@ export function sanitizeState(input: unknown): GameState {
     stress100Days,
     ateToday,
     noaWorkCharges,
+    actionCounts,
+    guestCounts,
+    koyukiLossCount,
+    eatSlotsMask,
     logs,
   };
 }
