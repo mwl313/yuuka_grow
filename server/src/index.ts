@@ -50,6 +50,8 @@ interface RankOutput {
 const CORS_METHODS = "GET, POST, OPTIONS";
 const CORS_HEADERS = "Content-Type";
 const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special", "any"]);
+const PRODUCTION_ORIGIN = "https://yuukagrow.pangyostonefist.org";
+const STATIC_OG_IMAGE_URL = `${PRODUCTION_ORIGIN}/assets/yuuka/yuuka_head.png`;
 let runIdSchemaEnsured = false;
 let adminSchemaEnsured = false;
 
@@ -701,24 +703,7 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
 		return htmlResponse("<h1>Not Found</h1>", 404, origin);
 	}
 
-	const row = await env.DB
-		.prepare(
-			`SELECT
-				nickname,
-				ending_category,
-				ending_id,
-				survival_days,
-				final_credits,
-				final_thigh_cm,
-				final_stage,
-				submitted_at_client,
-				submitted_at_server
-			FROM runs
-			WHERE share_id = ?
-			LIMIT 1`,
-		)
-		.bind(shareId)
-		.first<RunRecord>();
+	const row = await findRunByShareId(env.DB, shareId);
 
 	if (!row) {
 		return htmlResponse("<h1>Share Not Found</h1>", 404, origin);
@@ -731,10 +716,12 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
 
 	const lang = detectLang(request);
 	const endingTitle = getEndingTitle(row.ending_id, lang);
-	const title = `${row.nickname} - ${endingTitle} | Yuuka Grow`;
-	const description = `Ending ${endingTitle} - Day ${row.survival_days} - Credits ${row.final_credits} - Thigh ${row.final_thigh_cm}cm`;
-	const escapedTitle = escapeHtml(title);
-	const escapedDescription = escapeHtml(description);
+	const bestTop = Math.min(credit.percentileTop, thigh.percentileTop);
+	const bestTopText = bestTop.toFixed(1);
+	const ogTitle = `${row.nickname}의 점수는?`;
+	const ogDescription = `${row.nickname}의 점수는 상위 ${bestTopText}%입니다`;
+	const escapedTitle = escapeHtml(ogTitle);
+	const escapedDescription = escapeHtml(ogDescription);
 	const escapedNickname = escapeHtml(row.nickname);
 	const escapedEnding = escapeHtml(endingTitle);
 
@@ -746,6 +733,9 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
   <meta property="og:title" content="${escapedTitle}" />
   <meta property="og:description" content="${escapedDescription}" />
   <meta property="og:type" content="website" />
+  <meta property="og:image" content="${STATIC_OG_IMAGE_URL}" />
+  <meta property="og:image:width" content="500" />
+  <meta property="og:image:height" content="500" />
   <title>${escapedTitle}</title>
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #faf8ff; color: #1f1b2d; }
