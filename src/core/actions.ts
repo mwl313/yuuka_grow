@@ -104,6 +104,7 @@ export function applyWork(state: GameState): StepResult {
     usedNoa
       ? { credits: roundedMoneyGain, stress: roundedStressGain, charges: remainingNoaCharges }
       : { credits: roundedMoneyGain, stress: roundedStressGain },
+    "work",
   );
   next = addActionCount(next, "work");
 
@@ -127,7 +128,7 @@ export function applyEat(state: GameState): StepResult {
     credits: cost,
     thigh: Math.round(thighGain),
     stress: EAT_STRESS_REDUCE,
-  });
+  }, "eat");
   next = addActionCount(next, "eat");
 
   return finalizeAction(next);
@@ -154,7 +155,7 @@ export function applyGuest(state: GameState, rng: Rng): StepResult {
   let next = pushLog(nextGuestState, "log.guest", {
     nameKey: `guest.${guestResult.guestId}.name`,
     effectKey: guestResult.effectKey,
-  });
+  }, "guest");
   next = addActionCount(next, "guest");
 
   const consumed = consumeAction(normalizeAfterAction(next));
@@ -178,7 +179,7 @@ export function endDay(state: GameState): { state: GameState; ended?: RunResult 
       ...next,
       thighCm: next.thighCm * NO_MEAL_MULTIPLIER,
     };
-    next = pushLog(next, "log.noMeal");
+    next = pushLog(next, "log.noMeal", undefined, "system");
   }
 
   next = normalizeAfterAction(next);

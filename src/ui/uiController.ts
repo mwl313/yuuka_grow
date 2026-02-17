@@ -165,6 +165,12 @@ function createRunId(): string {
 const TURN_SLOT_KEYS = ["morning", "noon", "evening"] as const;
 const ACTION_INPUT_COOLDOWN_MS = 300;
 const ENDING_TRANSITION_DELAY_MS = 700;
+const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
+  work: "💼 ",
+  eat: "🍚 ",
+  guest: "🎲 ",
+  system: "⚠️ ",
+};
 
 export class UiController {
   private readonly root: HTMLElement;
@@ -217,7 +223,7 @@ export class UiController {
     return `
       <div class="app-shell font-plain">
         <section id="screen-lobby" class="screen">
-          <div class="skin-panel ui-panel lobby-card">
+          <div class="skin-panel ui-panel ui-panel--accented lobby-card">
             <button id="btn-settings" class="lobby-gear-button ui-btn ui-btn--icon font-title" type="button" aria-label=""></button>
             <h1 id="lobby-title" class="font-title"></h1>
             <p id="lobby-version"></p>
@@ -401,7 +407,7 @@ export class UiController {
             </label>
             <div class="confirm-actions">
               <button id="btn-nickname-apply" class="skin-button ui-btn ui-btn--primary font-title"></button>
-              <button id="btn-nickname-cancel" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+              <button id="btn-nickname-cancel" class="skin-button ui-btn ui-btn--pink font-title"></button>
             </div>
           </div>
         </div>
@@ -427,7 +433,7 @@ export class UiController {
             <p id="confirm-text"></p>
             <div class="confirm-actions">
               <button id="btn-confirm-yes" class="skin-button ui-btn ui-btn--primary font-title"></button>
-              <button id="btn-confirm-no" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+              <button id="btn-confirm-no" class="skin-button ui-btn ui-btn--pink font-title"></button>
             </div>
           </div>
         </div>
@@ -1090,11 +1096,13 @@ export class UiController {
     this.endingPanelMode = mode;
     this.activeEndingPanelId = endingId;
     this.refs.endingTitle.textContent = t(`ending.${endingId}.title`);
-    const condition = t(`ending.${endingId}.condition`);
-    if (condition.startsWith("[[missing:")) {
-      this.refs.endingDesc.textContent = getEndingCondition(endingId, getLanguage());
+    const desc = t(`ending.${endingId}.desc`);
+    if (!desc.startsWith("[[missing:")) {
+      this.refs.endingDesc.textContent = desc;
     } else {
-      this.refs.endingDesc.textContent = condition;
+      const condition = t(`ending.${endingId}.condition`);
+      this.refs.endingDesc.textContent =
+        condition.startsWith("[[missing:") ? getEndingCondition(endingId, getLanguage()) : condition;
     }
     this.updateEndingPanelPrimaryButtonLabel();
   }
@@ -1192,7 +1200,7 @@ export class UiController {
       this.refs.logs.innerHTML = "";
       const empty = document.createElement("li");
       empty.className = "log-empty";
-      empty.textContent = t("log.empty");
+      empty.textContent = `${LOG_EMOJI_PREFIX.system}${t("log.empty")}`;
       this.refs.logs.append(empty);
       this.scrollLogsToBottom();
       return;
@@ -1251,42 +1259,55 @@ export class UiController {
 
   private formatLogLine(line: string): string {
     const payload = decodeLog(line);
-    if (!payload) return line;
+    if (!payload) return `${LOG_EMOJI_PREFIX.system}${line}`;
+    const prefix = this.resolveLogPrefix(payload);
     const params = payload.params ?? {};
 
     if (payload.key === "log.work") {
-      return t(payload.key, {
+      return `${prefix}${t(payload.key, {
         credits: formatNumber(Number(params.credits)),
         stress: Number(params.stress),
-      });
+      })}`;
     }
 
     if (payload.key === "log.workNoa") {
-      return t(payload.key, {
+      return `${prefix}${t(payload.key, {
         credits: formatNumber(Number(params.credits)),
         stress: Number(params.stress),
         charges: Number(params.charges),
-      });
+      })}`;
     }
 
     if (payload.key === "log.eat") {
-      return t(payload.key, {
+      return `${prefix}${t(payload.key, {
         credits: formatNumber(Number(params.credits)),
         thigh: Number(params.thigh),
         stress: Number(params.stress),
-      });
+      })}`;
     }
 
     if (payload.key === "log.guest") {
       const nameKey = String(params.nameKey ?? "");
       const effectKey = String(params.effectKey ?? "");
-      return t(payload.key, {
+      return `${prefix}${t(payload.key, {
         name: t(nameKey),
         effect: t(effectKey),
-      });
+      })}`;
     }
 
-    return t(payload.key, params);
+    return `${prefix}${t(payload.key, params)}`;
+  }
+
+  private resolveLogPrefix(payload: { key: string; kind?: string }): string {
+    if (payload.kind === "work") return LOG_EMOJI_PREFIX.work;
+    if (payload.kind === "eat") return LOG_EMOJI_PREFIX.eat;
+    if (payload.kind === "guest") return LOG_EMOJI_PREFIX.guest;
+    if (payload.kind === "system") return LOG_EMOJI_PREFIX.system;
+
+    if (payload.key === "log.work" || payload.key === "log.workNoa") return LOG_EMOJI_PREFIX.work;
+    if (payload.key === "log.eat") return LOG_EMOJI_PREFIX.eat;
+    if (payload.key === "log.guest") return LOG_EMOJI_PREFIX.guest;
+    return LOG_EMOJI_PREFIX.system;
   }
 
   private renderScore(): void {

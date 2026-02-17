@@ -13,6 +13,7 @@ export type GuestOutcomeId = "default" | "success" | "slip" | "jackpot" | "loss"
 export type StressBandId = "stable" | "neutral" | "risky" | "gambling";
 export type LanguageCode = "ko" | "en" | "ja";
 export type ActionSlotId = "morning" | "noon" | "evening";
+export type LogKind = "work" | "eat" | "guest" | "system";
 
 export interface ActionCounts {
   work: number;
@@ -60,6 +61,7 @@ export interface RunResult {
 export interface LogPayload {
   key: string;
   params?: Record<string, number | string>;
+  kind?: LogKind;
 }
 
 export interface Settings {
