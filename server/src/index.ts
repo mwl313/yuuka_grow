@@ -775,11 +775,6 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
       color: #4a5568;
       font-size: 0.95rem;
     }
-    .stats-layout {
-      display: grid;
-      gap: 16px;
-      align-items: start;
-    }
     .stats-list,
     .top-list {
       margin: 0;
@@ -803,19 +798,6 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
       font-weight: 700;
       font-size: 0.96rem;
       word-break: break-word;
-    }
-    .yuuka-face-wrap {
-      justify-self: center;
-      width: min(160px, 42vw);
-    }
-    .yuuka-face {
-      display: block;
-      width: 100%;
-      height: auto;
-      border-radius: 14px;
-      border: 1px solid rgba(15, 22, 36, 0.12);
-      background: rgba(255, 255, 255, 0.6);
-      padding: 4px;
     }
     .divider {
       border-top: 1px solid rgba(15, 22, 36, 0.12);
@@ -841,15 +823,6 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
       font-weight: 700;
     }
     .play-link:active { transform: scale(0.99); }
-    @media (min-width: 520px) {
-      .stats-layout {
-        grid-template-columns: 1fr 140px;
-      }
-      .yuuka-face-wrap {
-        width: 140px;
-        justify-self: end;
-      }
-    }
     @media (max-height: 760px) {
       main { align-items: flex-start; }
     }
@@ -861,18 +834,13 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
       <div class="card-inner">
         <h1 class="title">${escapedNickname}</h1>
         <p class="subtitle">Yuuka Grow Share</p>
-        <div class="stats-layout">
-          <dl class="stats-list">
-            <div class="stat-row"><dt>Ending</dt><dd>${escapedEnding}</dd></div>
-            <div class="stat-row"><dt>Days</dt><dd>${row.survival_days}</dd></div>
-            <div class="stat-row"><dt>Credits</dt><dd>${row.final_credits}</dd></div>
-            <div class="stat-row"><dt>Thigh</dt><dd>${row.final_thigh_cm} cm</dd></div>
-            <div class="stat-row"><dt>Stage</dt><dd>${row.final_stage}</dd></div>
-          </dl>
-          <div class="yuuka-face-wrap">
-            <img class="yuuka-face" src="/assets/yuuka/yuuka_head.png" alt="Yuuka" />
-          </div>
-        </div>
+        <dl class="stats-list">
+          <div class="stat-row"><dt>Ending</dt><dd>${escapedEnding}</dd></div>
+          <div class="stat-row"><dt>Days</dt><dd>${row.survival_days}</dd></div>
+          <div class="stat-row"><dt>Credits</dt><dd>${row.final_credits}</dd></div>
+          <div class="stat-row"><dt>Thigh</dt><dd>${row.final_thigh_cm} cm</dd></div>
+          <div class="stat-row"><dt>Stage</dt><dd>${row.final_stage}</dd></div>
+        </dl>
         <div class="divider">
           <dl class="top-list">
             <div class="stat-row"><dt>Credit Top</dt><dd>${formatTopPercent(credit.percentileTop)}</dd></div>

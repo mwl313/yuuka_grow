@@ -7,10 +7,14 @@ import {
   ASSET_KEYS_GIANT_BG,
   AUTHOR_NAME,
   DEFAULT_NICKNAME,
+  EAT_BASE_COST,
+  EAT_COST_PER_CM,
   GIANT_TRIGGER_STAGE_INTERVAL,
   GIANT_TRIGGER_STAGE_START,
   IP_LABEL,
   VOLUME_STEP,
+  WORK_BASE_MONEY,
+  WORK_DAY_SLOPE,
 } from "../core/constants";
 import { checkImmediateBankrupt, toBaseEndCategory } from "../core/endings";
 import { ENDING_DEFS, selectEnding } from "../core/endingsTable";
@@ -66,6 +70,9 @@ interface UiRefs {
   btnWork: HTMLButtonElement;
   btnEat: HTMLButtonElement;
   btnGuest: HTMLButtonElement;
+  actionHintWork: HTMLElement;
+  actionHintEat: HTMLElement;
+  actionHintGuest: HTMLElement;
   btnContinue: HTMLButtonElement;
   btnRetry: HTMLButtonElement;
   btnBack: HTMLButtonElement;
@@ -310,6 +317,12 @@ export class UiController {
             </div>
           </div>
 
+          <div class="action-hints" aria-hidden="true">
+            <span id="action-hint-work" class="action-hint action-hint--work"></span>
+            <span id="action-hint-eat" class="action-hint action-hint--eat"></span>
+            <span id="action-hint-guest" class="action-hint action-hint--guest"></span>
+          </div>
+
           <div class="game-controls">
             <button id="btn-work" class="skin-button ui-btn ui-btn--secondary font-title"></button>
             <button id="btn-eat" class="skin-button ui-btn ui-btn--secondary font-title"></button>
@@ -514,6 +527,9 @@ export class UiController {
       btnWork: pick("btn-work"),
       btnEat: pick("btn-eat"),
       btnGuest: pick("btn-guest"),
+      actionHintWork: pick("action-hint-work"),
+      actionHintEat: pick("action-hint-eat"),
+      actionHintGuest: pick("action-hint-guest"),
       btnContinue: pick("btn-continue"),
       btnRetry: pick("btn-retry"),
       btnBack: pick("btn-back"),
@@ -1171,6 +1187,7 @@ export class UiController {
     this.refs.btnWork.disabled = this.state.actionsRemaining <= 0;
     this.refs.btnEat.disabled = this.state.actionsRemaining <= 0;
     this.refs.btnGuest.disabled = this.state.actionsRemaining <= 0;
+    this.updateActionHints();
 
     this.renderLogs(forceLogRefresh);
     this.renderer?.render(this.state);
@@ -1230,6 +1247,16 @@ export class UiController {
       slots[i].classList.toggle("hud-chip--active", isActive);
       slots[i].classList.toggle("ui-chip--active", isActive);
     }
+  }
+
+  private updateActionHints(): void {
+    const workBaseGain = WORK_BASE_MONEY + this.state.day * WORK_DAY_SLOPE;
+    const workExpectedGain = Math.round(workBaseGain * (this.state.noaWorkCharges > 0 ? 1.5 : 1));
+    const eatExpectedCost = Math.round(EAT_BASE_COST + this.state.thighCm * EAT_COST_PER_CM);
+
+    this.refs.actionHintWork.textContent = `+${this.creditNumberFormatter.format(workExpectedGain)}`;
+    this.refs.actionHintEat.textContent = `-${this.creditNumberFormatter.format(eatExpectedCost)}`;
+    this.refs.actionHintGuest.textContent = "";
   }
 
   private updateStressDangerState(stress: number, stress100Days: number): void {
