@@ -841,7 +841,27 @@ textarea {
 }
 
 .ending-book-row--locked {
-  opacity: 0.72;
+  opacity: 0.6;
+}
+
+.ending-book-name {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.ending-book-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f04c8a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
 }
 
 .ending-book-achieved {

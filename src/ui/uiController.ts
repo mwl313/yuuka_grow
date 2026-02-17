@@ -11,7 +11,13 @@ import { createInitialState } from "../core/state";
 import type { GameState, LanguageCode, RunResult, SaveData, Settings, StepResult } from "../core/types";
 import { formatNumber, getLanguage, onLanguageChange, setLanguage, t } from "../i18n";
 import { YuukaRenderer } from "../render/yuukaRenderer";
-import { getCollection, hasEnding, recordEnding, type EndingCollectionMap } from "../storage/endingCollection";
+import {
+  clearAllNewFlags,
+  getCollection,
+  hasEnding,
+  recordEnding,
+  type EndingCollectionMap,
+} from "../storage/endingCollection";
 import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
 import { getEndingCondition, getEndingTitle } from "../shared/endingMeta";
@@ -181,6 +187,7 @@ export class UiController {
   private readonly creditNumberFormatter = new Intl.NumberFormat("ko-KR");
   private endingPanelMode: "normal" | "preview" = "normal";
   private activeEndingPanelId: string | null = null;
+  private endingDexSessionNewIds = new Set<string>();
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -602,7 +609,7 @@ export class UiController {
     this.refs.btnLeaderSortCredit.textContent = t("leaderboard.sort.credit");
     this.refs.btnLeaderSortThigh.textContent = t("leaderboard.sort.thigh");
     this.refs.btnLeaderBack.textContent = t("leaderboard.back");
-    this.refs.endingBookTitle.textContent = t("endingBook.title");
+    this.refs.endingBookTitle.textContent = t("endingDex.title");
     this.refs.btnEndingBookBack.textContent = t("endingBook.back");
     this.setText("ending-book-col-name", t("endingBook.col.name"));
     this.setText("ending-book-col-condition", t("endingBook.col.condition"));
@@ -940,6 +947,7 @@ export class UiController {
   }
 
   private async openEndingBook(): Promise<void> {
+    this.snapshotAndClearEndingDexNewFlags();
     this.renderEndingBook();
     await this.transitionManager.transitionTo("endingBook", {
       type: "slide",
@@ -1025,6 +1033,7 @@ export class UiController {
   }
 
   private transitionToLobby(): Promise<void> {
+    this.clearEndingDexPreviewState();
     this.toggleEnding(false);
     return this.transitionManager.transitionTo("lobby", {
       type: "slide",
@@ -1418,32 +1427,53 @@ export class UiController {
   private renderEndingBook(): void {
     this.refs.endingBookBody.innerHTML = "";
     const { collected, total } = this.getEndingBookCounts();
-    this.refs.endingBookProgress.textContent = t("endingBook.progress", {
-      collected: formatNumber(collected),
-      total: formatNumber(total),
+    this.refs.endingBookProgress.textContent = t("endingDex.progress", {
+      x: formatNumber(collected),
+      y: formatNumber(total),
     });
     this.updateEndingBookButtonLabel();
 
     for (const ending of ENDING_DEFS) {
-      const unlocked = hasEnding(ending.id, this.endingCollection);
+      const entry = this.endingCollection[ending.id];
+      const unlocked = Boolean(entry);
+      const showNewBadge = unlocked && (entry.isNew || this.endingDexSessionNewIds.has(ending.id));
       const row = document.createElement("tr");
       row.className = unlocked ? "ending-book-row" : "ending-book-row ending-book-row--locked";
 
       const nameCell = document.createElement("td");
-      nameCell.textContent = unlocked ? t(ending.titleKey) : t("endingBook.locked");
+      if (unlocked) {
+        const nameWrap = document.createElement("span");
+        nameWrap.className = "ending-book-name";
+        nameWrap.textContent = t(ending.titleKey);
+        nameCell.append(nameWrap);
+        if (showNewBadge) {
+          const badge = document.createElement("span");
+          badge.className = "ending-book-new";
+          badge.textContent = "NEW";
+          nameCell.append(badge);
+        }
+      } else {
+        nameCell.textContent = t("endingBook.locked");
+      }
 
       const conditionCell = document.createElement("td");
-      conditionCell.textContent = unlocked ? t(`ending.${ending.id}.condition`) : t("endingBook.locked");
+      if (unlocked) {
+        const condition = t(`ending.${ending.id}.condition`);
+        conditionCell.textContent =
+          condition.startsWith("[[missing:") ? getEndingCondition(ending.id, getLanguage()) : condition;
+      } else {
+        conditionCell.textContent = t("endingBook.locked");
+      }
 
       const achievedCell = document.createElement("td");
-      achievedCell.textContent = unlocked ? t("endingBook.achieved") : t("endingBook.notAchieved");
+      achievedCell.textContent = unlocked ? t("endingDex.achieved") : t("endingDex.notAchieved");
       achievedCell.className = unlocked ? "ending-book-achieved is-achieved" : "ending-book-achieved is-missed";
 
       const actionCell = document.createElement("td");
       const viewButton = document.createElement("button");
       viewButton.type = "button";
       viewButton.className = "skin-button font-title ending-book-view-button";
-      viewButton.textContent = t("endingBook.view");
+      viewButton.textContent = unlocked ? t("endingDex.view") : "🔒";
       viewButton.disabled = !unlocked;
       if (unlocked) {
         viewButton.addEventListener("click", () => {
@@ -1456,6 +1486,22 @@ export class UiController {
       row.append(nameCell, conditionCell, achievedCell, actionCell);
       this.refs.endingBookBody.append(row);
     }
+  }
+
+  private snapshotAndClearEndingDexNewFlags(): void {
+    this.endingDexSessionNewIds.clear();
+    for (const [endingId, entry] of Object.entries(this.endingCollection)) {
+      if (entry.isNew) {
+        this.endingDexSessionNewIds.add(endingId);
+      }
+    }
+    // Clear persisted NEW flags once the dex is opened.
+    this.endingCollection = clearAllNewFlags(this.endingCollection);
+  }
+
+  private clearEndingDexPreviewState(): void {
+    this.endingDexSessionNewIds.clear();
+    this.endingCollection = clearAllNewFlags(this.endingCollection);
   }
 
   private createLeaderboardCell(value: string): HTMLTableCellElement {

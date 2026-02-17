@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "bgm:encode": "python tools/encode_bgm.py",
     "i18n:sync:endings": "node --loader ts-node/esm scripts/syncEndingTitles.ts",
     "i18n:sync": "npm run i18n:sync:endings",
     "build:guests-manifest": "node scripts/buildGuestsManifest.mjs",

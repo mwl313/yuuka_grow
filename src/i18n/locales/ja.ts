@@ -207,6 +207,11 @@ const ja: Record<string, string> = {
   "endingBook.achieved": "達成",
   "endingBook.notAchieved": "未達成",
   "endingBook.view": "表示",
+  "endingDex.title": "エンディング図鑑",
+  "endingDex.achieved": "達成",
+  "endingDex.notAchieved": "未達成",
+  "endingDex.view": "見る",
+  "endingDex.progress": "取得 {x} / {y}",
 
   // Result screen
   "result.title": "結果",

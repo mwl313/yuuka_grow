@@ -207,6 +207,11 @@ const ko: Record<string, string> = {
   "endingBook.achieved": "달성",
   "endingBook.notAchieved": "미달성",
   "endingBook.view": "보기",
+  "endingDex.title": "엔딩 도감",
+  "endingDex.achieved": "달성",
+  "endingDex.notAchieved": "미달성",
+  "endingDex.view": "보기",
+  "endingDex.progress": "획득 {x} / {y}",
 
   // Result screen
   "result.title": "결과",

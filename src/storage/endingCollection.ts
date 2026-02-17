@@ -4,6 +4,7 @@ export interface EndingCollectionEntry {
   count: number;
   firstAtIso: string;
   lastAtIso: string;
+  isNew: boolean;
 }
 
 export type EndingCollectionMap = Record<string, EndingCollectionEntry>;
@@ -26,6 +27,7 @@ function sanitizeCollection(input: unknown): EndingCollectionMap {
       count,
       firstAtIso,
       lastAtIso,
+      isNew: Boolean((item as { isNew?: unknown }).isNew),
     };
   }
   return next;
@@ -50,6 +52,28 @@ export function hasEnding(endingId: string, collection?: EndingCollectionMap): b
   return Boolean(source[endingId]);
 }
 
+export function isEndingNew(endingId: string, collection?: EndingCollectionMap): boolean {
+  const source = collection ?? getCollection();
+  return Boolean(source[endingId]?.isNew);
+}
+
+export function clearAllNewFlags(collection?: EndingCollectionMap): EndingCollectionMap {
+  const source = collection ?? getCollection();
+  let changed = false;
+  const next: EndingCollectionMap = {};
+  for (const [endingId, entry] of Object.entries(source)) {
+    const clearedEntry = entry.isNew ? { ...entry, isNew: false } : entry;
+    if (clearedEntry !== entry) {
+      changed = true;
+    }
+    next[endingId] = clearedEntry;
+  }
+  if (changed) {
+    saveCollection(next);
+  }
+  return changed ? next : source;
+}
+
 export function recordEnding(
   endingId: string,
   endedAtIso: string,
@@ -64,11 +88,14 @@ export function recordEnding(
           ...current,
           count: current.count + 1,
           lastAtIso: endedAtIso,
+          isNew: current.isNew,
         }
       : {
           count: 1,
           firstAtIso: endedAtIso,
           lastAtIso: endedAtIso,
+          // NEW badge is only for first-time discoveries.
+          isNew: true,
         },
   };
   saveCollection(next);

@@ -207,6 +207,11 @@ const en: Record<string, string> = {
   "endingBook.achieved": "Achieved",
   "endingBook.notAchieved": "Not Achieved",
   "endingBook.view": "View",
+  "endingDex.title": "Ending Dex",
+  "endingDex.achieved": "Achieved",
+  "endingDex.notAchieved": "Not Achieved",
+  "endingDex.view": "View",
+  "endingDex.progress": "{x} / {y} Collected",
 
   // Result screen
   "result.title": "Result",
