@@ -1,4 +1,5 @@
 import {
+  ASSET_PATH_BGM_DEATH,
   ASSET_PATH_BGM_MANIFEST,
   BGM_CATEGORIES,
   BGM_CONTEXT_GAP_MS,
@@ -85,6 +86,7 @@ export class BgmManager {
 
   private readonly audioA = createAudioElement();
   private readonly audioB = createAudioElement();
+  private readonly deathAudio = createAudioElement();
   private activeSlot: "a" | "b" | null = null;
   private activeCategory: BgmCategory | null = null;
   private desiredCategory: BgmCategory = "lobby";
@@ -93,6 +95,9 @@ export class BgmManager {
   private masterMuted = false;
   private unlocked = false;
   private unlocking = false;
+  private overrideActive = false;
+  private resumeBlockedAfterDeath = false;
+  private blockedCategoryAfterDeath: BgmCategory | null = null;
   private switchToken = 0;
 
   private readonly fadeRafByAudio = new Map<HTMLAudioElement, number>();
@@ -105,12 +110,16 @@ export class BgmManager {
 
   constructor() {
     this.unlockProbe.preload = "auto";
+    this.deathAudio.src = ASSET_PATH_BGM_DEATH;
 
     this.audioA.addEventListener("ended", () => {
       void this.handleTrackEnded(this.audioA);
     });
     this.audioB.addEventListener("ended", () => {
       void this.handleTrackEnded(this.audioB);
+    });
+    this.deathAudio.addEventListener("ended", () => {
+      this.finishDeathOverride();
     });
   }
 
@@ -121,11 +130,20 @@ export class BgmManager {
   }
 
   setContext(context: BgmContext): void {
+    const previousDesired = this.desiredCategory;
     const nextCategory = this.resolveCategory(context);
-    const changed = nextCategory !== this.desiredCategory;
+    const changed = nextCategory !== previousDesired;
     this.desiredCategory = nextCategory;
 
     void this.ensureManifestLoaded();
+    if (this.overrideActive) return;
+    if (this.resumeBlockedAfterDeath) {
+      if (nextCategory === this.blockedCategoryAfterDeath) {
+        return;
+      }
+      this.resumeBlockedAfterDeath = false;
+      this.blockedCategoryAfterDeath = null;
+    }
 
     if (changed) {
       void this.switchToDesiredCategory({ includeGap: true });
@@ -139,6 +157,13 @@ export class BgmManager {
 
   async unlock(): Promise<void> {
     if (this.unlocked) {
+      if (this.overrideActive) {
+        this.applyDeathVolume();
+        return;
+      }
+      if (this.resumeBlockedAfterDeath) {
+        return;
+      }
       if (!this.getActiveAudio()) {
         void this.switchToDesiredCategory({ includeGap: false });
       }
@@ -174,8 +199,43 @@ export class BgmManager {
     this.cancelFade(this.audioB);
     this.stopAudio(this.audioA);
     this.stopAudio(this.audioB);
+    this.stopAudio(this.deathAudio);
+    this.overrideActive = false;
+    this.resumeBlockedAfterDeath = false;
+    this.blockedCategoryAfterDeath = null;
     this.activeSlot = null;
     this.activeCategory = null;
+  }
+
+  playDeathOneShot(): void {
+    this.switchToken += 1;
+    this.overrideActive = true;
+    this.resumeBlockedAfterDeath = false;
+    this.blockedCategoryAfterDeath = null;
+    this.cancelFade(this.audioA);
+    this.cancelFade(this.audioB);
+    this.stopAudio(this.audioA);
+    this.stopAudio(this.audioB);
+    this.activeSlot = null;
+    this.activeCategory = null;
+    this.setFadeFactor(this.audioA, 0);
+    this.setFadeFactor(this.audioB, 0);
+    this.applyVolumes();
+
+    this.stopAudio(this.deathAudio);
+    this.applyDeathVolume();
+    this.deathAudio.loop = false;
+    void this.deathAudio.play().catch(() => {
+      // Missing or blocked death track should not block normal BGM flow.
+      this.finishDeathOverride();
+    });
+  }
+
+  private finishDeathOverride(): void {
+    this.overrideActive = false;
+    // After death track ends, keep silence until context changes to a different BGM category.
+    this.resumeBlockedAfterDeath = true;
+    this.blockedCategoryAfterDeath = this.desiredCategory;
   }
 
   private async ensureManifestLoaded(): Promise<void> {
@@ -218,6 +278,7 @@ export class BgmManager {
   }
 
   private async switchToDesiredCategory(options: { includeGap: boolean }): Promise<void> {
+    if (this.overrideActive) return;
     const targetCategory = this.desiredCategory;
     const token = ++this.switchToken;
 
@@ -255,6 +316,7 @@ export class BgmManager {
   }
 
   private async handleTrackEnded(audio: HTMLAudioElement): Promise<void> {
+    if (this.overrideActive) return;
     if (this.getActiveAudio() !== audio) return;
     if (!this.unlocked) return;
     const category = this.activeCategory;
@@ -378,10 +440,15 @@ export class BgmManager {
   private applyVolumes(): void {
     this.applyVolumeToAudio(this.audioA);
     this.applyVolumeToAudio(this.audioB);
+    this.applyDeathVolume();
   }
 
   private applyVolumeToAudio(audio: HTMLAudioElement): void {
     audio.volume = this.effectiveVolume() * this.getFadeFactor(audio);
+  }
+
+  private applyDeathVolume(): void {
+    this.deathAudio.volume = this.effectiveVolume();
   }
 
   private cancelFade(audio: HTMLAudioElement): void {

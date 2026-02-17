@@ -1033,6 +1033,7 @@ export class UiController {
       finalizedRun,
     );
     saveData(this.save);
+    this.bgmManager.playDeathOneShot();
     this.renderEndingPanel(finalizedRun.endingId, "normal");
     const preShakeTarget = this.refs.game.querySelector<HTMLElement>(".game-main-card") ?? this.refs.game;
     void (async () => {
