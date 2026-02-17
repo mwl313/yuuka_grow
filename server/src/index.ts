@@ -1,8 +1,9 @@
 import { requireAdminAuth } from "./admin/auth";
 import { renderAdminPageHtml } from "./admin/html";
 import { computeRankPercentile, generateShareId, sanitizeNickname, toNonNegativeInt } from "./lib/runUtils";
+import { getEndingTitle, type Lang } from "../../src/shared/endingMeta";
 
-type EndingCategory = "normal" | "bankrupt" | "stress" | "special";
+type EndingCategory = "normal" | "bankrupt" | "stress" | "special" | "any";
 type SortKey = "credit" | "thigh";
 
 interface AppEnv {
@@ -48,7 +49,7 @@ interface RankOutput {
 
 const CORS_METHODS = "GET, POST, OPTIONS";
 const CORS_HEADERS = "Content-Type";
-const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special"]);
+const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special", "any"]);
 let runIdSchemaEnsured = false;
 let adminSchemaEnsured = false;
 
@@ -59,6 +60,20 @@ function escapeHtml(input: string): string {
 		.replaceAll(">", "&gt;")
 		.replaceAll('"', "&quot;")
 		.replaceAll("'", "&#39;");
+}
+
+function detectLang(request: Request): Lang {
+	const acceptLanguage = request.headers.get("Accept-Language") ?? "";
+	const locales = acceptLanguage
+		.split(",")
+		.map((part) => part.split(";")[0]?.trim().toLowerCase())
+		.filter((part): part is string => Boolean(part));
+	for (const locale of locales) {
+		if (locale.startsWith("ko")) return "ko";
+		if (locale.startsWith("ja")) return "ja";
+		if (locale.startsWith("en")) return "en";
+	}
+	return "en";
 }
 
 function getAllowedCorsOrigin(request: Request): string | null {
@@ -714,15 +729,17 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
 		computeRank(env.DB, "final_thigh_cm", row.final_thigh_cm),
 	]);
 
-	const title = `${row.nickname}'s Yuuka Grow Run`;
-	const description = `Ending ${row.ending_id} - Day ${row.survival_days} - Credits ${row.final_credits} - Thigh ${row.final_thigh_cm}cm`;
+	const lang = detectLang(request);
+	const endingTitle = getEndingTitle(row.ending_id, lang);
+	const title = `${row.nickname} - ${endingTitle} | Yuuka Grow`;
+	const description = `Ending ${endingTitle} - Day ${row.survival_days} - Credits ${row.final_credits} - Thigh ${row.final_thigh_cm}cm`;
 	const escapedTitle = escapeHtml(title);
 	const escapedDescription = escapeHtml(description);
 	const escapedNickname = escapeHtml(row.nickname);
-	const escapedEnding = escapeHtml(`${row.ending_category} (${row.ending_id})`);
+	const escapedEnding = escapeHtml(endingTitle);
 
 	const html = `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />

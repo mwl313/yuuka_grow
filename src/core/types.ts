@@ -1,4 +1,6 @@
-export type EndingId = "normal" | "bankrupt" | "stress";
+export type EndingCategory = "normal" | "bankrupt" | "stress" | "special" | "any";
+export type EndBaseCategory = "normal" | "bankrupt" | "stress" | "special";
+export type EndingId = string;
 export type GuestId =
   | "teacher"
   | "momoi"
@@ -10,6 +12,25 @@ export type GuestId =
 export type GuestOutcomeId = "default" | "success" | "slip" | "jackpot" | "loss";
 export type StressBandId = "stable" | "neutral" | "risky" | "gambling";
 export type LanguageCode = "ko" | "en" | "ja";
+export type ActionSlotId = "morning" | "noon" | "evening";
+export type LogKind = "work" | "eat" | "guest" | "system";
+
+export interface ActionCounts {
+  work: number;
+  eat: number;
+  guest: number;
+  totalActions: number;
+}
+
+export interface GuestCounts {
+  aris: number;
+  koyuki: number;
+  maki: number;
+  momoi: number;
+  noa: number;
+  rio: number;
+  sensei: number;
+}
 
 export interface GameState {
   day: number;
@@ -20,11 +41,16 @@ export interface GameState {
   stress100Days: number;
   ateToday: boolean;
   noaWorkCharges: number;
+  actionCounts: ActionCounts;
+  guestCounts: GuestCounts;
+  koyukiLossCount: number;
+  eatSlotsMask: number;
   logs: string[];
 }
 
 export interface RunResult {
   endedAtIso: string;
+  endingCategory: EndingCategory;
   endingId: EndingId;
   dayReached: number;
   finalThighCm: number;
@@ -35,6 +61,7 @@ export interface RunResult {
 export interface LogPayload {
   key: string;
   params?: Record<string, number | string>;
+  kind?: LogKind;
 }
 
 export interface Settings {

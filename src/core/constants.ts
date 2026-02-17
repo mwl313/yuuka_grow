@@ -129,6 +129,7 @@ export const GUEST_IDS = [
 
 export const SAVE_KEY = "yuuka_save_v1";
 export const SETTINGS_KEY = "yuuka_settings_v1";
+export const ENDING_COLLECTION_KEY = "yuuka_endings_collection_v1";
 export const DEFAULT_THEME_ID = "default";
 export const DEFAULT_LANGUAGE = "en";
 export const DEFAULT_BGM_VOLUME = 0.5;
@@ -203,6 +204,28 @@ export const ASSET_KEY_FOOD_MANIFEST = "food_manifest";
 export const ASSET_PATH_FOOD_MANIFEST = "/assets/food/manifest.json";
 export const ASSET_KEY_WORK_MANIFEST = "work_manifest";
 export const ASSET_PATH_WORK_MANIFEST = "/assets/work/manifest.json";
+export const ASSET_PATH_BGM_MANIFEST = "/assets/bgm/manifest.json";
+
+export const BGM_CATEGORIES = [
+  "lobby",
+  "leaderboard",
+  "gameearly",
+  "gamemid",
+  "gamelate",
+  "gameend",
+  "gamefinal",
+  "result",
+] as const;
+export const BGM_DEFAULT_CROSSFADE_MS = 800;
+export const BGM_HARD_SWITCH_CROSSFADE_MS = 400;
+export const BGM_CONTEXT_GAP_MS = 100;
+export const BGM_OUTPUT_ATTENUATION = 0.85;
+export const BGM_MAX_LOAD_RETRIES = 3;
+export const BGM_GAME_EARLY_MAX_STAGE = 10;
+export const BGM_GAME_MID_MAX_STAGE = 17;
+export const BGM_GAME_LATE_MAX_STAGE = 24;
+export const BGM_GAME_END_MAX_STAGE = 31;
+export const ASSET_PATH_BGM_DEATH = "/assets/bgm/death.mp3";
 
 export const YUUKA_BASE_SCALE = 0.5;
 export const YUUKA_LOWER_MAX_MULT_L10 = 1.68;

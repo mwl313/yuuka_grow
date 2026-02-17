@@ -25,6 +25,22 @@
 - 음식만 갱신: `npm run build:food-manifest`
 - 업무만 갱신: `npm run build:work-manifest`
 
+## BGM 압축 파이프라인 (Windows)
+1. ffmpeg 설치
+- `winget install --id Gyan.FFmpeg -e`
+- 설치 후 새 터미널에서 `ffmpeg -version`으로 확인
+
+2. 실행
+- `npm run bgm:encode`
+- 기본 입력: `C:\Users\임민우\Desktop\유우카키우기\asset_test\sound disc`
+- 기본 출력: `public/assets/bgm`
+- 기본 품질: LAME VBR `q=4` (`--q 3` 고음질, `--q 5` 소용량)
+
+3. 산출물
+- 인코딩된 MP3: `public/assets/bgm/*.mp3`
+- 매핑 파일: `public/assets/bgm/output_mapping.json`
+- 매니페스트: `public/assets/bgm/manifest.json`
+
 ## 프론트 빌드
 1. 에셋을 변경했으면 `npm run build:assets-manifests` 실행
 2. `npm run build`

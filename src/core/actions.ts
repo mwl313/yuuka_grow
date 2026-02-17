@@ -13,7 +13,12 @@ import {
   WORK_STRESS_GAIN,
 } from "./constants";
 import { clampStress } from "./clamp";
-import { checkDayEndEnding, checkImmediateBankrupt } from "./endings";
+import { checkDayEndEnding, checkImmediateBankrupt, checkInstantSpecialEnding } from "./endings";
+import {
+  EAT_SLOT_EVENING_MASK,
+  EAT_SLOT_MORNING_MASK,
+  EAT_SLOT_NOON_MASK,
+} from "./endingsTable";
 import { applyRandomGuestEffect } from "./guests";
 import { pushLog } from "./logger";
 import type { GameState, Rng, RunResult, StepResult } from "./types";
@@ -30,6 +35,23 @@ function consumeAction(state: GameState): GameState {
   return {
     ...state,
     actionsRemaining: Math.max(state.actionsRemaining - 1, 0),
+  };
+}
+
+function actionSlotMaskByRemaining(actionsRemaining: number): number {
+  if (actionsRemaining === 3) return EAT_SLOT_MORNING_MASK;
+  if (actionsRemaining === 2) return EAT_SLOT_NOON_MASK;
+  return EAT_SLOT_EVENING_MASK;
+}
+
+function addActionCount(state: GameState, key: "work" | "eat" | "guest"): GameState {
+  return {
+    ...state,
+    actionCounts: {
+      ...state.actionCounts,
+      [key]: state.actionCounts[key] + 1,
+      totalActions: state.actionCounts.totalActions + 1,
+    },
   };
 }
 
@@ -82,7 +104,9 @@ export function applyWork(state: GameState): StepResult {
     usedNoa
       ? { credits: roundedMoneyGain, stress: roundedStressGain, charges: remainingNoaCharges }
       : { credits: roundedMoneyGain, stress: roundedStressGain },
+    "work",
   );
+  next = addActionCount(next, "work");
 
   return finalizeAction(next);
 }
@@ -97,23 +121,53 @@ export function applyEat(state: GameState): StepResult {
     stress: state.stress - EAT_STRESS_REDUCE,
     thighCm: state.thighCm + thighGain,
     ateToday: true,
+    eatSlotsMask: state.eatSlotsMask | actionSlotMaskByRemaining(state.actionsRemaining),
   };
 
   next = pushLog(next, "log.eat", {
     credits: cost,
     thigh: Math.round(thighGain),
     stress: EAT_STRESS_REDUCE,
-  });
+  }, "eat");
+  next = addActionCount(next, "eat");
 
   return finalizeAction(next);
 }
 
 export function applyGuest(state: GameState, rng: Rng): StepResult {
   const guestResult = applyRandomGuestEffect(state, rng);
-  const next = pushLog(guestResult.state, "log.guest", {
+  const nextGuestState: GameState = {
+    ...guestResult.state,
+    guestCounts: {
+      ...guestResult.state.guestCounts,
+      aris: guestResult.state.guestCounts.aris + (guestResult.guestId === "aris" ? 1 : 0),
+      koyuki: guestResult.state.guestCounts.koyuki + (guestResult.guestId === "koyuki" ? 1 : 0),
+      maki: guestResult.state.guestCounts.maki + (guestResult.guestId === "maki" ? 1 : 0),
+      momoi: guestResult.state.guestCounts.momoi + (guestResult.guestId === "momoi" ? 1 : 0),
+      noa: guestResult.state.guestCounts.noa + (guestResult.guestId === "noa" ? 1 : 0),
+      rio: guestResult.state.guestCounts.rio + (guestResult.guestId === "rio" ? 1 : 0),
+      sensei: guestResult.state.guestCounts.sensei + (guestResult.guestId === "teacher" ? 1 : 0),
+    },
+    koyukiLossCount:
+      guestResult.state.koyukiLossCount +
+      (guestResult.guestId === "koyuki" && guestResult.outcomeId === "loss" ? 1 : 0),
+  };
+  let next = pushLog(nextGuestState, "log.guest", {
     nameKey: `guest.${guestResult.guestId}.name`,
     effectKey: guestResult.effectKey,
-  });
+  }, "guest");
+  next = addActionCount(next, "guest");
+
+  const consumed = consumeAction(normalizeAfterAction(next));
+  const instantSpecial = checkInstantSpecialEnding(consumed);
+  if (instantSpecial) {
+    return {
+      state: consumed,
+      ended: instantSpecial,
+      dayEnded: false,
+    };
+  }
+
   return finalizeAction(next);
 }
 
@@ -125,7 +179,7 @@ export function endDay(state: GameState): { state: GameState; ended?: RunResult 
       ...next,
       thighCm: next.thighCm * NO_MEAL_MULTIPLIER,
     };
-    next = pushLog(next, "log.noMeal");
+    next = pushLog(next, "log.noMeal", undefined, "system");
   }
 
   next = normalizeAfterAction(next);

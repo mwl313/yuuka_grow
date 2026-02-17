@@ -1,5 +1,5 @@
 export type LeaderboardSort = "credit" | "thigh";
-export type EndingCategory = "normal" | "bankrupt" | "stress" | "special";
+export type EndingCategory = "normal" | "bankrupt" | "stress" | "special" | "any";
 
 export interface SubmitRunPayload {
   runId: string;
