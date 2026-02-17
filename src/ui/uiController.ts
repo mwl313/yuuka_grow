@@ -217,8 +217,8 @@ export class UiController {
     return `
       <div class="app-shell font-plain">
         <section id="screen-lobby" class="screen">
-          <div class="skin-panel lobby-card">
-            <button id="btn-settings" class="lobby-gear-button font-title" type="button" aria-label=""></button>
+          <div class="skin-panel ui-panel lobby-card">
+            <button id="btn-settings" class="lobby-gear-button ui-btn ui-btn--icon font-title" type="button" aria-label=""></button>
             <h1 id="lobby-title" class="font-title"></h1>
             <p id="lobby-version"></p>
             <p id="lobby-nickname" class="lobby-foot"></p>
@@ -226,14 +226,14 @@ export class UiController {
               <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka_dance.gif" alt="" />
             </div>
             <div class="lobby-menu">
-              <button id="btn-start" class="skin-button font-title lobby-primary-button"></button>
+              <button id="btn-start" class="skin-button ui-btn ui-btn--primary font-title lobby-primary-button"></button>
               <div class="lobby-secondary-grid">
-                <button id="btn-nickname" class="skin-button font-title"></button>
-                <button id="btn-leaderboard" class="skin-button font-title"></button>
-                <button id="btn-credits" class="skin-button font-title"></button>
-                <button id="btn-guide" class="skin-button font-title"></button>
+                <button id="btn-nickname" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+                <button id="btn-leaderboard" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+                <button id="btn-credits" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+                <button id="btn-guide" class="skin-button ui-btn ui-btn--secondary font-title"></button>
               </div>
-              <button id="btn-ending-book" class="skin-button font-title lobby-ending-book-button"></button>
+              <button id="btn-ending-book" class="skin-button ui-btn ui-btn--secondary font-title lobby-ending-book-button"></button>
             </div>
             <p id="lobby-disclaimer" class="lobby-disclaimer"></p>
             <p id="lobby-credits" class="lobby-foot"></p>
@@ -242,11 +242,11 @@ export class UiController {
         </section>
 
         <section id="screen-game" class="screen">
-          <div class="skin-panel game-main-card">
+          <div class="skin-panel ui-panel game-main-card">
             <div class="game-hud-header">
               <div class="hud-mini-buttons">
-                <button id="btn-mini-lobby" class="mini-hud-button font-title" type="button">L</button>
-                <button id="btn-mini-sound" class="mini-hud-button font-title" type="button">S</button>
+                <button id="btn-mini-lobby" class="mini-hud-button ui-btn ui-btn--icon font-title" type="button">L</button>
+                <button id="btn-mini-sound" class="mini-hud-button ui-btn ui-btn--icon font-title" type="button">S</button>
               </div>
               <div class="hud-row">
                 <span id="hud-day" class="hud-item"></span>
@@ -258,20 +258,20 @@ export class UiController {
               </div>
               <div class="game-hud-footer">
                 <div class="hud-slots">
-                  <span id="hud-slot-morning" class="hud-chip">
+                  <span id="hud-slot-morning" class="hud-chip ui-chip">
                     <span class="hud-chip-icon">☀</span>
                     <span id="hud-slot-morning-label"></span>
                   </span>
-                  <span id="hud-slot-noon" class="hud-chip">
+                  <span id="hud-slot-noon" class="hud-chip ui-chip">
                     <span class="hud-chip-icon">🍱</span>
                     <span id="hud-slot-noon-label"></span>
                   </span>
-                  <span id="hud-slot-evening" class="hud-chip">
+                  <span id="hud-slot-evening" class="hud-chip ui-chip">
                     <span class="hud-chip-icon">🌙</span>
                     <span id="hud-slot-evening-label"></span>
                   </span>
                 </div>
-                <span id="hud-stage" class="hud-stage-badge"></span>
+                <span id="hud-stage" class="hud-stage-badge ui-chip"></span>
               </div>
             </div>
 
@@ -284,14 +284,14 @@ export class UiController {
           </div>
 
           <div class="game-controls">
-            <button id="btn-work" class="skin-button font-title"></button>
-            <button id="btn-eat" class="skin-button font-title"></button>
-            <button id="btn-guest" class="skin-button font-title"></button>
+            <button id="btn-work" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+            <button id="btn-eat" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+            <button id="btn-guest" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </section>
 
         <section id="screen-score" class="screen">
-          <div class="skin-panel score-card">
+          <div class="skin-panel ui-panel score-card">
             <h2 id="score-title" class="font-title"></h2>
             <ul class="score-list">
               <li class="score-row"><span class="score-label" id="score-label-ending"></span><span class="score-value" id="score-ending"></span></li>
@@ -302,22 +302,22 @@ export class UiController {
             </ul>
             <p id="score-upload-status" class="score-upload-status"></p>
             <div class="stack-buttons">
-              <button id="btn-retry" class="skin-button font-title"></button>
-              <button id="btn-back" class="skin-button font-title"></button>
-              <button id="btn-upload-share" class="skin-button font-title"></button>
+              <button id="btn-retry" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+              <button id="btn-back" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+              <button id="btn-upload-share" class="skin-button ui-btn ui-btn--primary font-title"></button>
             </div>
           </div>
         </section>
 
         <section id="screen-leaderboard" class="screen">
-          <div class="skin-panel score-card leaderboard-card">
+          <div class="skin-panel ui-panel score-card leaderboard-card">
             <h2 id="leaderboard-title" class="font-title"></h2>
             <div class="leaderboard-sort">
-              <button id="btn-leader-sort-credit" class="skin-button font-title"></button>
-              <button id="btn-leader-sort-thigh" class="skin-button font-title"></button>
+              <button id="btn-leader-sort-credit" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+              <button id="btn-leader-sort-thigh" class="skin-button ui-btn ui-btn--secondary font-title"></button>
             </div>
             <p id="leaderboard-status" class="leaderboard-status"></p>
-            <div class="leaderboard-table-wrap">
+            <div class="leaderboard-table-wrap ui-panel">
               <table class="leaderboard-table">
                 <thead>
                   <tr>
@@ -332,15 +332,15 @@ export class UiController {
                 <tbody id="leaderboard-body"></tbody>
               </table>
             </div>
-            <button id="btn-leader-back" class="skin-button font-title"></button>
+            <button id="btn-leader-back" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </section>
 
         <section id="screen-ending-book" class="screen">
-          <div class="skin-panel score-card ending-book-card">
+          <div class="skin-panel ui-panel score-card ending-book-card">
             <h2 id="ending-book-title" class="font-title"></h2>
             <p id="ending-book-progress" class="ending-book-progress"></p>
-            <div class="ending-book-table-wrap">
+            <div class="ending-book-table-wrap ui-panel">
               <table class="ending-book-table">
                 <thead>
                   <tr>
@@ -353,20 +353,20 @@ export class UiController {
                 <tbody id="ending-book-body"></tbody>
               </table>
             </div>
-            <button id="btn-ending-book-back" class="skin-button font-title"></button>
+            <button id="btn-ending-book-back" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </section>
 
         <div id="ending-overlay" class="overlay hidden">
-          <div class="skin-panel modal-card panel-transition-card">
+          <div class="skin-panel ui-panel modal-card panel-transition-card">
             <h2 id="ending-title" class="font-title"></h2>
             <p id="ending-desc"></p>
-            <button id="btn-continue" class="skin-button font-title"></button>
+            <button id="btn-continue" class="skin-button ui-btn ui-btn--primary font-title"></button>
           </div>
         </div>
 
         <div id="settings-modal" class="overlay hidden">
-          <div class="skin-panel modal-card panel-transition-card">
+          <div class="skin-panel ui-panel modal-card panel-transition-card">
             <h2 id="settings-title" class="font-title"></h2>
             <label class="settings-row">
               <span id="settings-bgm"></span>
@@ -388,59 +388,59 @@ export class UiController {
                 <option value="ja"></option>
               </select>
             </label>
-            <button id="btn-close-settings" class="skin-button font-title"></button>
+            <button id="btn-close-settings" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </div>
 
         <div id="nickname-modal" class="overlay hidden">
-          <div class="skin-panel modal-card panel-transition-card">
+          <div class="skin-panel ui-panel modal-card panel-transition-card">
             <h2 id="nickname-title" class="font-title"></h2>
             <label class="settings-row">
               <span id="nickname-label"></span>
               <input id="nickname-input" type="text" maxlength="12" />
             </label>
             <div class="confirm-actions">
-              <button id="btn-nickname-apply" class="skin-button font-title"></button>
-              <button id="btn-nickname-cancel" class="skin-button font-title"></button>
+              <button id="btn-nickname-apply" class="skin-button ui-btn ui-btn--primary font-title"></button>
+              <button id="btn-nickname-cancel" class="skin-button ui-btn ui-btn--secondary font-title"></button>
             </div>
           </div>
         </div>
 
         <div id="credits-modal" class="overlay hidden">
-          <div class="skin-panel modal-card panel-transition-card">
+          <div class="skin-panel ui-panel modal-card panel-transition-card">
             <h2 id="credits-title" class="font-title"></h2>
             <p id="credits-body" class="modal-temp-body"></p>
-            <button id="btn-close-credits" class="skin-button font-title"></button>
+            <button id="btn-close-credits" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </div>
 
         <div id="guide-modal" class="overlay hidden">
-          <div class="skin-panel modal-card panel-transition-card">
+          <div class="skin-panel ui-panel modal-card panel-transition-card">
             <h2 id="guide-title" class="font-title"></h2>
             <p id="guide-body" class="modal-temp-body"></p>
-            <button id="btn-close-guide" class="skin-button font-title"></button>
+            <button id="btn-close-guide" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </div>
 
         <div id="confirm-overlay" class="overlay hidden">
-          <div class="skin-panel modal-card panel-transition-card confirm-card">
+          <div class="skin-panel ui-panel modal-card panel-transition-card confirm-card">
             <p id="confirm-text"></p>
             <div class="confirm-actions">
-              <button id="btn-confirm-yes" class="skin-button font-title"></button>
-              <button id="btn-confirm-no" class="skin-button font-title"></button>
+              <button id="btn-confirm-yes" class="skin-button ui-btn ui-btn--primary font-title"></button>
+              <button id="btn-confirm-no" class="skin-button ui-btn ui-btn--secondary font-title"></button>
             </div>
           </div>
         </div>
 
         <div id="upload-result-overlay" class="overlay hidden">
-          <div class="skin-panel modal-card panel-transition-card confirm-card upload-result-card">
-            <button id="btn-upload-result-close" class="upload-result-close" type="button">X</button>
+          <div class="skin-panel ui-panel modal-card panel-transition-card confirm-card upload-result-card">
+            <button id="btn-upload-result-close" class="upload-result-close ui-btn ui-btn--icon" type="button">X</button>
             <h2 id="upload-result-title" class="font-title"></h2>
             <p id="score-rank-credit-popup" class="score-rank-line"></p>
             <p id="score-rank-thigh-popup" class="score-rank-line"></p>
             <div class="confirm-actions">
-              <button id="btn-upload-result-share" class="skin-button font-title"></button>
-              <button id="btn-upload-result-lobby" class="skin-button font-title"></button>
+              <button id="btn-upload-result-share" class="skin-button ui-btn ui-btn--primary font-title"></button>
+              <button id="btn-upload-result-lobby" class="skin-button ui-btn ui-btn--secondary font-title"></button>
             </div>
           </div>
         </div>
@@ -1148,7 +1148,9 @@ export class UiController {
       const isUsed = i < usedCount;
       const isActive = i === usedCount && usedCount < slots.length;
       slots[i].classList.toggle("hud-chip--used", isUsed);
+      slots[i].classList.toggle("ui-chip--used", isUsed);
       slots[i].classList.toggle("hud-chip--active", isActive);
+      slots[i].classList.toggle("ui-chip--active", isActive);
     }
   }
 
@@ -1503,7 +1505,7 @@ export class UiController {
         nameCell.append(nameWrap);
         if (showNewBadge) {
           const badge = document.createElement("span");
-          badge.className = "ending-book-new";
+          badge.className = "ending-book-new ui-badge--new";
           badge.textContent = "NEW";
           nameCell.append(badge);
         }
@@ -1527,7 +1529,7 @@ export class UiController {
       const actionCell = document.createElement("td");
       const viewButton = document.createElement("button");
       viewButton.type = "button";
-      viewButton.className = "skin-button font-title ending-book-view-button";
+      viewButton.className = "skin-button ui-btn ui-btn--secondary font-title ending-book-view-button";
       viewButton.textContent = unlocked ? t("endingDex.view") : "🔒";
       viewButton.disabled = !unlocked;
       if (unlocked) {
