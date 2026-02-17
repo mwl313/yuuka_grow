@@ -524,21 +524,21 @@ textarea {
 }
 
 .game-main-card {
+  --board-pad-x: 12px;
   display: grid;
   gap: 10px;
   padding: 12px;
 }
 
 .game-hud-header {
-  position: relative;
+  width: 100%;
   display: grid;
   gap: 8px;
-  padding: 8px 62px 8px 8px;
+  padding: 10px 0;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(251, 247, 239, 0.9);
+  border: 1px solid rgba(13, 27, 42, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .render-host {
@@ -559,9 +559,10 @@ textarea {
 }
 
 .hud-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
+  padding: 0 var(--board-pad-x);
   gap: 8px;
   min-width: 0;
 }
@@ -576,7 +577,9 @@ textarea {
 }
 
 .hud-item--right {
-  text-align: right;
+  text-align: left;
+  justify-self: stretch;
+  padding-left: clamp(14px, 2.4vw, 26px);
 }
 
 .hud-slots {
@@ -625,6 +628,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 var(--board-pad-x);
   gap: 8px;
 }
 
@@ -643,32 +647,8 @@ textarea {
   background: rgba(11, 15, 20, 0.06);
 }
 
-.hud-mini-buttons {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.mini-hud-button {
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-0);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
 #btn-mini-sound.muted {
-  opacity: 0.55;
-  text-decoration: line-through;
+  opacity: 0.62;
 }
 
 .hud-stress--danger {
@@ -722,14 +702,45 @@ textarea {
 }
 
 .game-log-panel {
-  padding: 12px;
+  width: 100%;
   height: clamp(180px, 26svh, 240px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
   border: 1px solid rgba(13, 27, 42, 0.25);
   border-radius: 10px;
   background: rgba(251, 247, 239, 0.9);
+  overflow: hidden;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px var(--board-pad-x);
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(15, 22, 36, 0.12);
+}
+
+.log-header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-log-button {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.log-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px var(--board-pad-x) 10px;
 }
 
 #log-title {
@@ -740,8 +751,7 @@ textarea {
   margin: 0;
   padding: 0;
   list-style: none;
-  flex: 1;
-  min-height: 0;
+  height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -750,7 +760,13 @@ textarea {
 .log-empty {
   font-size: 14px;
   line-height: 1.45;
-  margin-bottom: 6px;
+  padding: 6px 0;
+  margin: 0;
+  border-bottom: 1px dashed rgba(15, 22, 36, 0.18);
+}
+
+#log-list > li:last-child {
+  border-bottom: none;
 }
 
 .log-line--typing::after {
@@ -1339,12 +1355,13 @@ textarea {
   }
 
   .game-main-card {
+    --board-pad-x: 14px;
     gap: 12px;
     padding: 14px;
   }
 
   .game-hud-header {
-    padding: 10px 66px 10px 10px;
+    padding: 10px 0;
   }
 
   .hud-item {

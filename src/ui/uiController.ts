@@ -267,10 +267,6 @@ export class UiController {
         <section id="screen-game" class="screen">
           <div class="skin-panel ui-panel game-main-card">
             <div class="game-hud-header">
-              <div class="hud-mini-buttons">
-                <button id="btn-mini-lobby" class="mini-hud-button ui-btn ui-btn--icon font-title" type="button">L</button>
-                <button id="btn-mini-sound" class="mini-hud-button ui-btn ui-btn--icon font-title" type="button">S</button>
-              </div>
               <div class="hud-row">
                 <span id="hud-day" class="hud-item"></span>
                 <span id="hud-credits" class="hud-item hud-item--right"></span>
@@ -301,8 +297,16 @@ export class UiController {
             <div id="render-host" class="render-host"></div>
 
             <div class="game-log-panel">
-              <h2 id="log-title" class="font-title"></h2>
-              <ul id="log-list"></ul>
+              <div class="log-header">
+                <h2 id="log-title" class="font-title"></h2>
+                <div class="log-header-controls">
+                  <button id="btn-mini-lobby" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="Back">←</button>
+                  <button id="btn-mini-sound" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="Sound">🔊</button>
+                </div>
+              </div>
+              <div class="log-body">
+                <ul id="log-list"></ul>
+              </div>
             </div>
           </div>
 
@@ -986,6 +990,7 @@ export class UiController {
 
   private updateSoundToggleUi(): void {
     this.refs.btnMiniSound.classList.toggle("muted", this.settings.masterMuted);
+    this.refs.btnMiniSound.textContent = this.settings.masterMuted ? "🔇" : "🔊";
   }
 
   private showScreen(screen: ScreenId): void {
