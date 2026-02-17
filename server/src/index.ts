@@ -50,8 +50,6 @@ interface RankOutput {
 const CORS_METHODS = "GET, POST, OPTIONS";
 const CORS_HEADERS = "Content-Type";
 const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special", "any"]);
-const PRODUCTION_ORIGIN = "https://yuukagrow.pangyostonefist.org";
-const STATIC_OG_IMAGE_URL = `${PRODUCTION_ORIGIN}/assets/yuuka/yuuka_head.png`;
 let runIdSchemaEnsured = false;
 let adminSchemaEnsured = false;
 
@@ -718,8 +716,8 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
 	const endingTitle = getEndingTitle(row.ending_id, lang);
 	const bestTop = Math.min(credit.percentileTop, thigh.percentileTop);
 	const bestTopText = bestTop.toFixed(1);
-	const ogTitle = `${row.nickname}의 점수는?`;
-	const ogDescription = `${row.nickname}의 점수는 상위 ${bestTopText}%입니다`;
+	const ogTitle = "유우카 키우기";
+	const ogDescription = `${row.nickname}님은 상위 ${bestTopText}%입니다`;
 	const escapedTitle = escapeHtml(ogTitle);
 	const escapedDescription = escapeHtml(ogDescription);
 	const escapedNickname = escapeHtml(row.nickname);
@@ -733,34 +731,156 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
   <meta property="og:title" content="${escapedTitle}" />
   <meta property="og:description" content="${escapedDescription}" />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="${STATIC_OG_IMAGE_URL}" />
-  <meta property="og:image:width" content="500" />
-  <meta property="og:image:height" content="500" />
   <title>${escapedTitle}</title>
   <style>
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #faf8ff; color: #1f1b2d; }
-    main { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
-    .card { width: min(520px, 92vw); background: #fff; border-radius: 16px; border: 1px solid #e6dff5; box-shadow: 0 16px 40px rgba(40, 18, 68, 0.08); padding: 22px; }
-    h1 { margin: 0 0 12px; font-size: 1.35rem; }
-    p { margin: 6px 0; }
-    .meta { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee6ff; }
-    a { display: inline-block; margin-top: 14px; text-decoration: none; background: #e267b4; color: #fff; padding: 10px 16px; border-radius: 10px; font-weight: 700; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+      color: #0f1624;
+      background:
+        radial-gradient(900px 700px at 50% 20%, rgba(71, 198, 255, 0.16), rgba(71, 198, 255, 0) 60%),
+        linear-gradient(180deg, #e9f1fb, #dbe7f6);
+    }
+    main {
+      min-height: 100svh;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    .card {
+      width: min(680px, 94vw);
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .card-inner {
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+    }
+    .title {
+      margin: 0;
+      font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+    .subtitle {
+      margin: 0;
+      color: #4a5568;
+      font-size: 0.95rem;
+    }
+    .stats-layout {
+      display: grid;
+      gap: 16px;
+      align-items: start;
+    }
+    .stats-list,
+    .top-list {
+      margin: 0;
+      display: grid;
+      gap: 8px;
+    }
+    .stat-row {
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .stat-row dt {
+      margin: 0;
+      color: #5a6578;
+      font-size: 0.92rem;
+    }
+    .stat-row dd {
+      margin: 0;
+      color: #1d2738;
+      font-weight: 700;
+      font-size: 0.96rem;
+      word-break: break-word;
+    }
+    .yuuka-face-wrap {
+      justify-self: center;
+      width: min(160px, 42vw);
+    }
+    .yuuka-face {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 14px;
+      border: 1px solid rgba(15, 22, 36, 0.12);
+      background: rgba(255, 255, 255, 0.6);
+      padding: 4px;
+    }
+    .divider {
+      border-top: 1px solid rgba(15, 22, 36, 0.12);
+      margin-top: 2px;
+      padding-top: 12px;
+    }
+    .top-list .stat-row dt,
+    .top-list .stat-row dd {
+      font-size: 0.9rem;
+    }
+    .play-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      min-height: 44px;
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(71, 198, 255, 0.6);
+      background: linear-gradient(180deg, rgba(71, 198, 255, 0.22), rgba(42, 174, 255, 0.14));
+      color: #102035;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .play-link:active { transform: scale(0.99); }
+    @media (min-width: 520px) {
+      .stats-layout {
+        grid-template-columns: 1fr 140px;
+      }
+      .yuuka-face-wrap {
+        width: 140px;
+        justify-self: end;
+      }
+    }
+    @media (max-height: 760px) {
+      main { align-items: flex-start; }
+    }
   </style>
 </head>
 <body>
   <main>
     <section class="card">
-      <h1>${escapedNickname}</h1>
-      <p><strong>Ending:</strong> ${escapedEnding}</p>
-      <p><strong>Days:</strong> ${row.survival_days}</p>
-      <p><strong>Credits:</strong> ${row.final_credits}</p>
-      <p><strong>Thigh:</strong> ${row.final_thigh_cm} cm</p>
-      <p><strong>Stage:</strong> ${row.final_stage}</p>
-      <div class="meta">
-        <p><strong>Credit Top:</strong> ${formatTopPercent(credit.percentileTop)}</p>
-        <p><strong>Thigh Top:</strong> ${formatTopPercent(thigh.percentileTop)}</p>
+      <div class="card-inner">
+        <h1 class="title">${escapedNickname}</h1>
+        <p class="subtitle">Yuuka Grow Share</p>
+        <div class="stats-layout">
+          <dl class="stats-list">
+            <div class="stat-row"><dt>Ending</dt><dd>${escapedEnding}</dd></div>
+            <div class="stat-row"><dt>Days</dt><dd>${row.survival_days}</dd></div>
+            <div class="stat-row"><dt>Credits</dt><dd>${row.final_credits}</dd></div>
+            <div class="stat-row"><dt>Thigh</dt><dd>${row.final_thigh_cm} cm</dd></div>
+            <div class="stat-row"><dt>Stage</dt><dd>${row.final_stage}</dd></div>
+          </dl>
+          <div class="yuuka-face-wrap">
+            <img class="yuuka-face" src="/assets/yuuka/yuuka_head.png" alt="Yuuka" />
+          </div>
+        </div>
+        <div class="divider">
+          <dl class="top-list">
+            <div class="stat-row"><dt>Credit Top</dt><dd>${formatTopPercent(credit.percentileTop)}</dd></div>
+            <div class="stat-row"><dt>Thigh Top</dt><dd>${formatTopPercent(thigh.percentileTop)}</dd></div>
+          </dl>
+        </div>
+        <a class="play-link" href="/">Play</a>
       </div>
-      <a href="/">Play</a>
     </section>
   </main>
 </body>
