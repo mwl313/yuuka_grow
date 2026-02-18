@@ -178,6 +178,7 @@ class YuukaScene extends Phaser.Scene {
   private currentBgKey = ASSET_KEY_BG_MAIN_OFFICE;
   private giantBgIndex = 0;
   private activeGuest?: GuestCinematicRuntime;
+  private onBackgroundTransitionStateChanged?: (isTransitioning: boolean) => void;
 
   private debugEnabled = false;
   private debugGraphics?: Phaser.GameObjects.Graphics;
@@ -286,6 +287,12 @@ class YuukaScene extends Phaser.Scene {
     if (this.sys.isActive()) {
       this.redraw();
     }
+  }
+
+  setBackgroundTransitionStateListener(
+    listener?: (isTransitioning: boolean) => void,
+  ): void {
+    this.onBackgroundTransitionStateChanged = listener;
   }
 
   playGuestCinematic(guestKey: GuestAssetKey): void {
@@ -788,6 +795,7 @@ class YuukaScene extends Phaser.Scene {
       this.setBackgroundTextureIfExists(nextBgKey);
       return;
     }
+    this.onBackgroundTransitionStateChanged?.(true);
     this.startTransitionShake();
 
     const overlay = this.add
@@ -858,7 +866,10 @@ class YuukaScene extends Phaser.Scene {
                           targets: overlay,
                           alpha: 0,
                           duration: GIANT_BG_FLASH_DROP_3_MS,
-                          onComplete: () => overlay.destroy(),
+                          onComplete: () => {
+                            overlay.destroy();
+                            this.onBackgroundTransitionStateChanged?.(false);
+                          },
                         });
                       },
                     });
@@ -1359,6 +1370,7 @@ class YuukaScene extends Phaser.Scene {
 export class YuukaRenderer {
   private readonly scene: YuukaScene;
   private readonly game: Phaser.Game;
+  private readonly backgroundTransitionListeners = new Set<(isTransitioning: boolean) => void>();
   private initializedLogCursor = false;
   private processedLogCount = 0;
   private initializedStageCursor = false;
@@ -1366,6 +1378,9 @@ export class YuukaRenderer {
 
   constructor(parentId: string, settings: Settings) {
     this.scene = new YuukaScene("yuuka-scene", this.toAudioConfig(settings));
+    this.scene.setBackgroundTransitionStateListener((isTransitioning) => {
+      this.backgroundTransitionListeners.forEach((listener) => listener(isTransitioning));
+    });
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
       width: RENDER_WIDTH,
@@ -1395,7 +1410,16 @@ export class YuukaRenderer {
   }
 
   destroy(): void {
+    this.scene.setBackgroundTransitionStateListener(undefined);
+    this.backgroundTransitionListeners.clear();
     this.game.destroy(true);
+  }
+
+  onBackgroundTransitionStateChanged(listener: (isTransitioning: boolean) => void): () => void {
+    this.backgroundTransitionListeners.add(listener);
+    return () => {
+      this.backgroundTransitionListeners.delete(listener);
+    };
   }
 
   private toAudioConfig(settings: Settings): AudioChannelConfig {

@@ -7,8 +7,9 @@ import {
   STRESS_MAX,
   STRESS_MIN,
 } from "./constants";
+import { createInitialBuffMultipliers } from "./buffSystem";
 import { clamp } from "./clamp";
-import type { ActionCounts, GameState, GuestCounts } from "./types";
+import type { ActionCounts, BuffCardSelection, BuffMultipliers, GameState, GuestCounts } from "./types";
 
 function createInitialActionCounts(): ActionCounts {
   return {
@@ -45,6 +46,9 @@ export function createInitialState(): GameState {
     guestCounts: createInitialGuestCounts(),
     koyukiLossCount: 0,
     eatSlotsMask: 0,
+    milestonesHit: [],
+    buffs: createInitialBuffMultipliers(),
+    buffHistory: [],
     logs: [],
   };
 }
@@ -144,6 +148,68 @@ export function sanitizeState(input: unknown): GameState {
   const logs = Array.isArray(source.logs)
     ? source.logs.filter((line): line is string => typeof line === "string")
     : fallback.logs;
+  const milestonesHit = Array.isArray(source.milestonesHit)
+    ? source.milestonesHit
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+        .map((value) => Math.floor(value))
+        .filter((value) => value >= 0)
+    : fallback.milestonesHit;
+  const buffsSource =
+    source.buffs && typeof source.buffs === "object"
+      ? (source.buffs as Partial<BuffMultipliers>)
+      : {};
+  const baseBuffs = createInitialBuffMultipliers();
+  const buffs: BuffMultipliers = {
+    stressGainMult:
+      typeof buffsSource.stressGainMult === "number" && Number.isFinite(buffsSource.stressGainMult)
+        ? Math.max(0.05, buffsSource.stressGainMult)
+        : baseBuffs.stressGainMult,
+    creditGainMult:
+      typeof buffsSource.creditGainMult === "number" && Number.isFinite(buffsSource.creditGainMult)
+        ? Math.max(0.05, buffsSource.creditGainMult)
+        : baseBuffs.creditGainMult,
+    thighGainMult:
+      typeof buffsSource.thighGainMult === "number" && Number.isFinite(buffsSource.thighGainMult)
+        ? Math.max(0.05, buffsSource.thighGainMult)
+        : baseBuffs.thighGainMult,
+    koyukiWinProbMult:
+      typeof buffsSource.koyukiWinProbMult === "number" && Number.isFinite(buffsSource.koyukiWinProbMult)
+        ? Math.max(0.05, buffsSource.koyukiWinProbMult)
+        : baseBuffs.koyukiWinProbMult,
+    makiWinProbMult:
+      typeof buffsSource.makiWinProbMult === "number" && Number.isFinite(buffsSource.makiWinProbMult)
+        ? Math.max(0.05, buffsSource.makiWinProbMult)
+        : baseBuffs.makiWinProbMult,
+    guestCostMult:
+      typeof buffsSource.guestCostMult === "number" && Number.isFinite(buffsSource.guestCostMult)
+        ? Math.max(0.05, buffsSource.guestCostMult)
+        : baseBuffs.guestCostMult,
+    eatCostMult:
+      typeof buffsSource.eatCostMult === "number" && Number.isFinite(buffsSource.eatCostMult)
+        ? Math.max(0.05, buffsSource.eatCostMult)
+        : baseBuffs.eatCostMult,
+    noEatPenaltyMult:
+      typeof buffsSource.noEatPenaltyMult === "number" && Number.isFinite(buffsSource.noEatPenaltyMult)
+        ? Math.max(0.05, buffsSource.noEatPenaltyMult)
+        : baseBuffs.noEatPenaltyMult,
+  };
+  const buffHistory = Array.isArray(source.buffHistory)
+    ? source.buffHistory.filter((entry): entry is BuffCardSelection => {
+        if (!entry || typeof entry !== "object") return false;
+        const card = entry as Partial<BuffCardSelection>;
+        if (typeof card.id !== "string") return false;
+        if (!card.buff || typeof card.buff !== "object") return false;
+        if (!card.debuff || typeof card.debuff !== "object") return false;
+        if (typeof card.rarityScore !== "number") return false;
+        if (typeof card.rarityLabel !== "string") return false;
+        if (typeof card.milestone !== "number") return false;
+        if (typeof card.selectedAtDay !== "number") return false;
+        if (typeof card.selectedAtStage !== "number") return false;
+        if (typeof card.buff.key !== "string" || typeof card.buff.delta !== "number") return false;
+        if (typeof card.debuff.key !== "string" || typeof card.debuff.delta !== "number") return false;
+        return true;
+      })
+    : fallback.buffHistory;
 
   return {
     day,
@@ -158,6 +224,9 @@ export function sanitizeState(input: unknown): GameState {
     guestCounts,
     koyukiLossCount,
     eatSlotsMask,
+    milestonesHit,
+    buffs,
+    buffHistory,
     logs,
   };
 }

@@ -88,6 +88,8 @@ const ja: Record<string, string> = {
   "log.eat": "ごはんを食べたよ: クレジット -{credits} / 太もも +{thigh}cm / ストレス -{stress}",
   "log.noMeal": "今日は食事なし: 太もも -5%",
   "log.guest": "ゲストが来たよ: {name} -> {effect}",
+  "log.buffCard.pick": "バフカード選択 ({rarity}): {buff} / {debuff}",
+  "log.buffCard.skip": "バフカードをスキップした。",
 
   // Guest names/effects
   "guest.teacher.name": "先生",

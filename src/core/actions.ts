@@ -14,6 +14,7 @@ import {
 } from "./constants";
 import { clampStress } from "./clamp";
 import { checkDayEndEnding, checkImmediateBankrupt, checkInstantSpecialEnding } from "./endings";
+import { getNoEatEffectiveFactor } from "./buffSystem";
 import {
   EAT_SLOT_EVENING_MASK,
   EAT_SLOT_MORNING_MASK,
@@ -79,8 +80,8 @@ function finalizeAction(state: GameState): StepResult {
 }
 
 export function applyWork(state: GameState): StepResult {
-  let moneyGain = WORK_BASE_MONEY + state.day * WORK_DAY_SLOPE;
-  let stressGain = WORK_STRESS_GAIN;
+  let moneyGain = (WORK_BASE_MONEY + state.day * WORK_DAY_SLOPE) * state.buffs.creditGainMult;
+  let stressGain = WORK_STRESS_GAIN * state.buffs.stressGainMult;
   let remainingNoaCharges = state.noaWorkCharges;
   const usedNoa = remainingNoaCharges > 0;
 
@@ -114,8 +115,8 @@ export function applyWork(state: GameState): StepResult {
 }
 
 export function applyEat(state: GameState): StepResult {
-  const cost = Math.round(EAT_BASE_COST + state.thighCm * EAT_COST_PER_CM);
-  const thighGain = EAT_BASE_GAIN_CM + state.thighCm * EAT_GAIN_FACTOR;
+  const cost = Math.round((EAT_BASE_COST + state.thighCm * EAT_COST_PER_CM) * state.buffs.eatCostMult);
+  const thighGain = (EAT_BASE_GAIN_CM + state.thighCm * EAT_GAIN_FACTOR) * state.buffs.thighGainMult;
 
   let next: GameState = {
     ...state,
@@ -138,7 +139,7 @@ export function applyEat(state: GameState): StepResult {
 
 export function applyGuest(state: GameState, rng: Rng): StepResult {
   const stage = getStage(state.thighCm);
-  const guestCost = getGuestCost(stage);
+  const guestCost = Math.round(getGuestCost(stage) * state.buffs.guestCostMult);
   const paidState: GameState = {
     ...state,
     money: state.money - guestCost,
@@ -183,9 +184,10 @@ export function endDay(state: GameState): { state: GameState; ended?: RunResult 
   let next = { ...state };
 
   if (!next.ateToday) {
+    const noEatFactor = getNoEatEffectiveFactor(next.buffs.noEatPenaltyMult, NO_MEAL_MULTIPLIER);
     next = {
       ...next,
-      thighCm: next.thighCm * NO_MEAL_MULTIPLIER,
+      thighCm: next.thighCm * noEatFactor,
     };
     next = pushLog(next, "log.noMeal", undefined, "system");
   }

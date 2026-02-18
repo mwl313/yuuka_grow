@@ -14,6 +14,43 @@ export type StressBandId = 0 | 1 | 2 | 3 | 4;
 export type LanguageCode = "ko" | "en" | "ja";
 export type ActionSlotId = "morning" | "noon" | "evening";
 export type LogKind = "work" | "eat" | "guest" | "system";
+export type BuffKey =
+  | "stressGainMult"
+  | "creditGainMult"
+  | "thighGainMult"
+  | "koyukiWinProbMult"
+  | "makiWinProbMult"
+  | "guestCostMult"
+  | "eatCostMult"
+  | "noEatPenaltyMult";
+export type BuffRarityLabel = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary";
+
+export interface BuffMultipliers {
+  stressGainMult: number;
+  creditGainMult: number;
+  thighGainMult: number;
+  koyukiWinProbMult: number;
+  makiWinProbMult: number;
+  guestCostMult: number;
+  eatCostMult: number;
+  noEatPenaltyMult: number;
+}
+
+export interface BuffCardEffect {
+  key: BuffKey;
+  delta: number;
+}
+
+export interface BuffCardSelection {
+  id: string;
+  rarityScore: number;
+  rarityLabel: BuffRarityLabel;
+  buff: BuffCardEffect;
+  debuff: BuffCardEffect;
+  milestone: number;
+  selectedAtDay: number;
+  selectedAtStage: number;
+}
 
 export interface ActionCounts {
   work: number;
@@ -45,6 +82,9 @@ export interface GameState {
   guestCounts: GuestCounts;
   koyukiLossCount: number;
   eatSlotsMask: number;
+  milestonesHit: number[];
+  buffs: BuffMultipliers;
+  buffHistory: BuffCardSelection[];
   logs: string[];
 }
 

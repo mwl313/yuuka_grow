@@ -88,6 +88,8 @@ const ko: Record<string, string> = {
   "log.eat": "밥먹기: 크레딧 -{credits} / 허벅지 +{thigh}cm / 스트레스 -{stress}",
   "log.noMeal": "오늘은 한 끼도 못 먹었다: 허벅지 -5%",
   "log.guest": "게스트: {name} -> {effect}",
+  "log.buffCard.pick": "버프 카드 선택 ({rarity}): {buff} / {debuff}",
+  "log.buffCard.skip": "버프 카드를 스킵했다.",
 
   // Guest names/effects
   "guest.teacher.name": "선생님",

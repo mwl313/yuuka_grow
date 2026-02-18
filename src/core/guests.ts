@@ -23,9 +23,9 @@ import {
   OUTCOME_SLIP,
   OUTCOME_SUCCESS,
 } from "./constants";
+import { getAdjustedWinProbability } from "./buffSystem";
 import { pickGuestByStress } from "./guestWeights";
-import { weightedPick } from "./rng";
-import type { GameState, GuestEffectResult, GuestOutcomeId, Rng, WeightedItem } from "./types";
+import type { GameState, GuestEffectResult, GuestOutcomeId, Rng } from "./types";
 
 export interface GuestOutcomeEffect {
   outcomeId: GuestOutcomeId;
@@ -173,8 +173,10 @@ function applyPercent(value: number, pct: number): number {
 
 function applyOutcome(state: GameState, effect: GuestOutcomeEffect): GameState {
   const next = { ...state };
-  next.thighCm = applyPercent(next.thighCm, effect.thighPct);
-  next.money = Math.round(applyPercent(next.money, effect.moneyPct));
+  const scaledThighPct = effect.thighPct * next.buffs.thighGainMult;
+  const scaledMoneyPct = effect.moneyPct * next.buffs.creditGainMult;
+  next.thighCm = applyPercent(next.thighCm, scaledThighPct);
+  next.money = Math.round(applyPercent(next.money, scaledMoneyPct));
   next.stress += effect.stressDelta;
   if (effect.refreshNoaCharges) {
     next.noaWorkCharges = NOA_WORK_CHARGES;
@@ -182,20 +184,37 @@ function applyOutcome(state: GameState, effect: GuestOutcomeEffect): GameState {
   return next;
 }
 
-function pickEqualChanceOutcome(rng: Rng, outcomes: GuestOutcomeEffect[]): GuestOutcomeEffect {
-  const weightedOutcomes: WeightedItem<GuestOutcomeEffect>[] = outcomes.map((item) => ({
-    item,
-    weight: 1,
-  }));
-  return weightedPick(rng.next01, weightedOutcomes);
+function pickOutcomeBySuccessProbability(
+  outcomes: readonly GuestOutcomeEffect[],
+  successOutcomeId: GuestOutcomeId,
+  successProbability: number,
+  rng: Rng,
+): GuestOutcomeEffect {
+  const successOutcome = outcomes.find((item) => item.outcomeId === successOutcomeId);
+  const failOutcome = outcomes.find((item) => item.outcomeId !== successOutcomeId);
+  if (!successOutcome || !failOutcome) {
+    return outcomes[0];
+  }
+  return rng.next01() < successProbability ? successOutcome : failOutcome;
 }
 
-function resolveGuestOutcome(guestId: GuestEffectResult["guestId"], rng: Rng): GuestOutcomeEffect {
+function resolveGuestOutcome(state: GameState, guestId: GuestEffectResult["guestId"], rng: Rng): GuestOutcomeEffect {
   const config = GUEST_EFFECT_TABLE[guestId];
   if (!config.random) {
     return config.outcomes[0];
   }
-  return pickEqualChanceOutcome(rng, [...config.outcomes]);
+
+  if (guestId === "koyuki") {
+    const successProbability = getAdjustedWinProbability(0.5, state.buffs.koyukiWinProbMult);
+    return pickOutcomeBySuccessProbability(config.outcomes, OUTCOME_JACKPOT, successProbability, rng);
+  }
+
+  if (guestId === "maki") {
+    const successProbability = getAdjustedWinProbability(0.5, state.buffs.makiWinProbMult);
+    return pickOutcomeBySuccessProbability(config.outcomes, OUTCOME_SUCCESS, successProbability, rng);
+  }
+
+  return config.outcomes[0];
 }
 
 export function getGuestCheatEntries(): GuestCheatEntry[] {
@@ -211,7 +230,7 @@ export function getGuestCheatEntries(): GuestCheatEntry[] {
 
 export function applyRandomGuestEffect(state: GameState, rng: Rng): GuestEffectResult {
   const guestId = pickGuestByStress(state.stress, rng);
-  const outcome = resolveGuestOutcome(guestId, rng);
+  const outcome = resolveGuestOutcome(state, guestId, rng);
   return {
     state: applyOutcome(state, outcome),
     guestId,

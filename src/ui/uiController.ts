@@ -2,6 +2,12 @@ import { buildShareUrl, fetchLeaderboard, submitRun } from "../api/leaderboardAp
 import type { LeaderboardItem, LeaderboardSort, RankEntry } from "../api/leaderboardApi";
 import { BgmManager } from "../audio/bgmManager";
 import { applyEat, applyGuest, applyWork } from "../core/actions";
+import {
+  applyCardToMultipliers,
+  BUFF_CARD_STAGE_MILESTONES,
+  formatBuffEffectLine,
+  generateBuffCards,
+} from "../core/buffSystem";
 import { getGuestCheatEntries, type GuestOutcomeEffect } from "../core/guests";
 import {
   APP_VERSION,
@@ -21,11 +27,19 @@ import {
 import { checkImmediateBankrupt, toBaseEndCategory } from "../core/endings";
 import { ENDING_DEFS, selectEnding } from "../core/endingsTable";
 import { getGuestCost } from "../core/guestCost";
-import { decodeLog } from "../core/logger";
+import { decodeLog, pushLog } from "../core/logger";
 import { defaultRng } from "../core/rng";
 import { getStage } from "../core/stage";
 import { createInitialState } from "../core/state";
-import type { GameState, LanguageCode, RunResult, SaveData, Settings, StepResult } from "../core/types";
+import type {
+  BuffCardSelection,
+  GameState,
+  LanguageCode,
+  RunResult,
+  SaveData,
+  Settings,
+  StepResult,
+} from "../core/types";
 import { formatNumber, getLanguage, onLanguageChange, setLanguage, t } from "../i18n";
 import { YuukaRenderer } from "../render/yuukaRenderer";
 import {
@@ -39,6 +53,7 @@ import { loadSaveData, recordRunResult, saveData } from "../storage/save";
 import { loadSettings, saveSettings } from "../storage/settings";
 import { getEndingCondition, getEndingTitle } from "../shared/endingMeta";
 import { UiAnimController } from "./anim/uiAnimController";
+import { CardManager } from "./cardManager";
 import { clearPanelTransition, hidePanelWithTransition, showPanelWithTransition } from "./transition/panelTransition";
 import { TransitionManager } from "./transition/transitionManager";
 import { hapticGameOver, hapticLobbyTap, hapticStageBgTransition, hapticStageUp } from "./haptics";
@@ -92,6 +107,16 @@ interface UiRefs {
   btnMiniLobby: HTMLButtonElement;
   btnMiniSound: HTMLButtonElement;
   btnMiniCheatSheet: HTMLButtonElement;
+  btnCurrentBuffs: HTMLButtonElement;
+  buffCardsOverlay: HTMLElement;
+  buffCardsTitle: HTMLElement;
+  buffCardsList: HTMLElement;
+  btnBuffCardSkip: HTMLButtonElement;
+  currentBuffsOverlay: HTMLElement;
+  currentBuffsTitle: HTMLElement;
+  currentBuffsSummary: HTMLElement;
+  currentBuffsHistory: HTMLElement;
+  btnCloseCurrentBuffs: HTMLButtonElement;
   hudDay: HTMLElement;
   hudCredits: HTMLElement;
   hudStress: HTMLElement;
@@ -195,6 +220,7 @@ function createRunId(): string {
 const TURN_SLOT_KEYS = ["morning", "noon", "evening"] as const;
 const ACTION_INPUT_COOLDOWN_MS = 300;
 const ENDING_TRANSITION_DELAY_MS = 700;
+const CARD_OVERLAY_ANIM_MS = 200;
 const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   work: "💼 ",
   eat: "🍚 ",
@@ -225,6 +251,7 @@ export class UiController {
   private endingCollection: EndingCollectionMap = {};
   private uiAnimController!: UiAnimController;
   private readonly transitionManager = new TransitionManager();
+  private readonly cardManager = new CardManager(BUFF_CARD_STAGE_MILESTONES);
   private renderedRawLogs: string[] = [];
   private readonly creditNumberFormatter = new Intl.NumberFormat("ko-KR");
   private endingPanelMode: "normal" | "preview" = "normal";
@@ -233,6 +260,9 @@ export class UiController {
   private lastHapticStage: number | null = null;
   private lastHapticGiantBgIndex: number | null = null;
   private hasRunEndHapticFired = false;
+  private isInputLocked = false;
+  private processingBuffMilestones = false;
+  private activeBuffCardChoices: BuffCardSelection[] | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -319,6 +349,7 @@ export class UiController {
               <div class="log-header">
                 <h2 id="log-title" class="font-title"></h2>
                 <div class="log-header-controls">
+                  <button id="btn-current-buffs" class="skin-button ui-btn ui-btn--secondary font-title current-buffs-button" type="button">현재 버프</button>
                   <button id="btn-mini-lobby" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="Back">←</button>
                   <button id="btn-mini-sound" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="Sound">🔊</button>
                   <button id="btn-mini-cheatsheet" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="게스트 치트시트">ℹ️</button>
@@ -488,6 +519,23 @@ export class UiController {
           </div>
         </div>
 
+        <div id="buff-cards-overlay" class="overlay hidden buff-cards-overlay">
+          <div class="skin-panel ui-panel modal-card panel-transition-card buff-cards-panel">
+            <h2 id="buff-cards-title" class="font-title">선택지</h2>
+            <div id="buff-cards-list" class="buff-cards-list"></div>
+            <button id="btn-buff-card-skip" class="skin-button ui-btn ui-btn--secondary font-title">스킵</button>
+          </div>
+        </div>
+
+        <div id="current-buffs-overlay" class="overlay hidden">
+          <div class="skin-panel ui-panel modal-card panel-transition-card current-buffs-card">
+            <h2 id="current-buffs-title" class="font-title">현재 버프</h2>
+            <div id="current-buffs-summary" class="current-buffs-summary"></div>
+            <div id="current-buffs-history" class="current-buffs-history"></div>
+            <button id="btn-close-current-buffs" class="skin-button ui-btn ui-btn--secondary font-title">닫기</button>
+          </div>
+        </div>
+
         <div id="confirm-overlay" class="overlay hidden">
           <div class="skin-panel ui-panel modal-card panel-transition-card confirm-card">
             <p id="confirm-text"></p>
@@ -568,6 +616,16 @@ export class UiController {
       btnMiniLobby: pick("btn-mini-lobby"),
       btnMiniSound: pick("btn-mini-sound"),
       btnMiniCheatSheet: pick("btn-mini-cheatsheet"),
+      btnCurrentBuffs: pick("btn-current-buffs"),
+      buffCardsOverlay: pick("buff-cards-overlay"),
+      buffCardsTitle: pick("buff-cards-title"),
+      buffCardsList: pick("buff-cards-list"),
+      btnBuffCardSkip: pick("btn-buff-card-skip"),
+      currentBuffsOverlay: pick("current-buffs-overlay"),
+      currentBuffsTitle: pick("current-buffs-title"),
+      currentBuffsSummary: pick("current-buffs-summary"),
+      currentBuffsHistory: pick("current-buffs-history"),
+      btnCloseCurrentBuffs: pick("btn-close-current-buffs"),
       hudDay: pick("hud-day"),
       hudCredits: pick("hud-credits"),
       hudStress: pick("hud-stress"),
@@ -725,6 +783,12 @@ export class UiController {
     this.refs.btnCloseCheatSheet.textContent = t("cheatsheet.close");
     this.refs.btnMiniCheatSheet.setAttribute("aria-label", t("cheatsheet.title"));
     this.renderGuestCheatSheet();
+    this.refs.btnCurrentBuffs.textContent = "현재 버프";
+    this.refs.buffCardsTitle.textContent = "선택지";
+    this.refs.btnBuffCardSkip.textContent = "스킵";
+    this.refs.currentBuffsTitle.textContent = "현재 버프";
+    this.refs.btnCloseCurrentBuffs.textContent = "닫기";
+    this.renderCurrentBuffsOverlay();
 
     this.setText("score-title", t("result.title"));
     this.setText("score-label-ending", t("result.ending"));
@@ -1056,6 +1120,9 @@ export class UiController {
       this.refs.btnMiniLobby,
       this.refs.btnMiniSound,
       this.refs.btnMiniCheatSheet,
+      this.refs.btnCurrentBuffs,
+      this.refs.btnBuffCardSkip,
+      this.refs.btnCloseCurrentBuffs,
       this.refs.btnCloseCheatSheet,
       this.refs.btnConfirmYes,
       this.refs.btnConfirmNo,
@@ -1135,6 +1202,11 @@ export class UiController {
     this.refs.btnMiniLobby.addEventListener("click", () => this.openAbandonConfirm(true));
     this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
     this.refs.btnMiniCheatSheet.addEventListener("click", () => this.openCheatSheetModal(true));
+    this.refs.btnCurrentBuffs.addEventListener("click", () => this.openCurrentBuffsOverlay(true));
+    this.refs.btnBuffCardSkip.addEventListener("click", () => {
+      void this.resolveBuffCardSelection(undefined);
+    });
+    this.refs.btnCloseCurrentBuffs.addEventListener("click", () => this.openCurrentBuffsOverlay(false));
     this.refs.btnCloseCheatSheet.addEventListener("click", () => this.openCheatSheetModal(false));
     this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
     this.refs.btnConfirmNo.addEventListener("click", () => this.openAbandonConfirm(false));
@@ -1161,6 +1233,11 @@ export class UiController {
     this.refs.cheatSheetModal.addEventListener("click", (event) => {
       if (event.target === this.refs.cheatSheetModal) {
         this.openCheatSheetModal(false);
+      }
+    });
+    this.refs.currentBuffsOverlay.addEventListener("click", (event) => {
+      if (event.target === this.refs.currentBuffsOverlay) {
+        this.openCurrentBuffsOverlay(false);
       }
     });
   }
@@ -1213,6 +1290,7 @@ export class UiController {
   private resetForNewRun(): void {
     this.uiAnimController.forceFinalizeAll("reset");
     this.state = createInitialState();
+    this.resetBuffCardUiState();
     const stage = getStage(this.state.thighCm);
     this.lastHapticStage = stage;
     this.lastHapticGiantBgIndex = this.getGiantBgIndexForStage(stage);
@@ -1260,10 +1338,199 @@ export class UiController {
   }
 
   private openCheatSheetModal(open: boolean): void {
+    if (open && this.isInputLocked) return;
     if (open) {
       this.renderGuestCheatSheet();
     }
     this.setOverlayOpen(this.refs.cheatSheetModal, open);
+  }
+
+  private openCurrentBuffsOverlay(open: boolean): void {
+    if (open && this.isInputLocked) return;
+    if (open) {
+      this.renderCurrentBuffsOverlay();
+    }
+    this.setOverlayOpen(this.refs.currentBuffsOverlay, open);
+  }
+
+  private setInputLocked(locked: boolean): void {
+    this.isInputLocked = locked;
+    this.refs.game.classList.toggle("input-locked", locked);
+  }
+
+  private registerBuffMilestones(stage: number): void {
+    const hitSet = new Set(this.state.milestonesHit);
+    const newlyHit = this.cardManager.registerStage(stage, hitSet);
+    if (newlyHit.length === 0) return;
+
+    this.state = {
+      ...this.state,
+      milestonesHit: [...hitSet].sort((a, b) => a - b),
+    };
+    this.save = {
+      ...this.save,
+      state: this.state,
+    };
+    saveData(this.save);
+  }
+
+  private resetBuffCardUiState(): void {
+    this.activeBuffCardChoices = null;
+    this.cardManager.reset();
+    this.setInputLocked(false);
+    this.refs.buffCardsOverlay.classList.remove("is-open");
+    this.refs.buffCardsOverlay.classList.add("hidden");
+  }
+
+  private async tryShowNextBuffCard(): Promise<void> {
+    if (this.processingBuffMilestones) return;
+    if (this.activeScreen !== "game") return;
+    this.processingBuffMilestones = true;
+    try {
+      while (this.activeScreen === "game") {
+        const milestone = this.cardManager.dequeueReadyMilestone();
+        if (milestone === undefined) break;
+
+        const stage = getStage(this.state.thighCm);
+        const cards = generateBuffCards(milestone, this.state.day, stage, defaultRng.next01);
+        this.activeBuffCardChoices = cards;
+        this.cardManager.setCardOverlayActive(true);
+        this.setInputLocked(true);
+        this.renderBuffCardChoices(cards);
+        await this.animateBuffCardOverlay(true);
+        break;
+      }
+    } finally {
+      this.processingBuffMilestones = false;
+    }
+  }
+
+  private renderBuffCardChoices(cards: BuffCardSelection[]): void {
+    this.refs.buffCardsList.innerHTML = "";
+    for (const card of cards) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "skin-button ui-btn ui-btn--secondary buff-card-option";
+      button.addEventListener("click", () => {
+        void this.resolveBuffCardSelection(card.id);
+      });
+
+      const rarity = document.createElement("div");
+      rarity.className = `buff-card-rarity buff-card-rarity--${card.rarityLabel.toLowerCase()}`;
+      rarity.textContent = card.rarityLabel;
+
+      const buffLine = document.createElement("p");
+      buffLine.className = "buff-card-line buff-card-line--buff";
+      buffLine.textContent = formatBuffEffectLine(card.buff);
+
+      const debuffLine = document.createElement("p");
+      debuffLine.className = "buff-card-line buff-card-line--debuff";
+      debuffLine.textContent = formatBuffEffectLine(card.debuff);
+
+      button.append(rarity, buffLine, debuffLine);
+      this.refs.buffCardsList.append(button);
+    }
+  }
+
+  private async resolveBuffCardSelection(selectedCardId?: string): Promise<void> {
+    const cards = this.activeBuffCardChoices;
+    if (!cards) return;
+    const selected = selectedCardId ? cards.find((card) => card.id === selectedCardId) : undefined;
+
+    await this.animateBuffCardOverlay(false);
+    this.cardManager.setCardOverlayActive(false);
+    this.activeBuffCardChoices = null;
+
+    if (selected) {
+      this.state = {
+        ...this.state,
+        buffs: applyCardToMultipliers(this.state.buffs, selected),
+        buffHistory: [selected, ...this.state.buffHistory],
+      };
+      this.state = {
+        ...this.state,
+        logs: this.state.logs,
+      };
+    }
+
+    if (selected) {
+      this.state = pushLog(this.state, "log.buffCard.pick", {
+        buff: formatBuffEffectLine(selected.buff),
+        debuff: formatBuffEffectLine(selected.debuff),
+        rarity: selected.rarityLabel,
+      }, "system");
+    } else {
+      this.state = pushLog(this.state, "log.buffCard.skip", undefined, "system");
+    }
+
+    this.renderLogs(true);
+    this.renderCurrentBuffsOverlay();
+    this.save = {
+      ...this.save,
+      state: this.state,
+    };
+    saveData(this.save);
+    this.setInputLocked(false);
+    void this.tryShowNextBuffCard();
+  }
+
+  private async animateBuffCardOverlay(open: boolean): Promise<void> {
+    const overlay = this.refs.buffCardsOverlay;
+    if (open) {
+      overlay.classList.remove("hidden");
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      overlay.classList.add("is-open");
+      await new Promise<void>((resolve) => window.setTimeout(resolve, CARD_OVERLAY_ANIM_MS));
+      return;
+    }
+    overlay.classList.remove("is-open");
+    await new Promise<void>((resolve) => window.setTimeout(resolve, CARD_OVERLAY_ANIM_MS));
+    overlay.classList.add("hidden");
+  }
+
+  private renderCurrentBuffsOverlay(): void {
+    const format = (value: number): string => `x${value.toFixed(2)}`;
+    const summaryLines = [
+      `credit ${format(this.state.buffs.creditGainMult)}`,
+      `thigh ${format(this.state.buffs.thighGainMult)}`,
+      `stress ${format(this.state.buffs.stressGainMult)}`,
+      `makiProb ${format(this.state.buffs.makiWinProbMult)}`,
+      `koyukiProb ${format(this.state.buffs.koyukiWinProbMult)}`,
+      `guestCost ${format(this.state.buffs.guestCostMult)}`,
+      `eatCost ${format(this.state.buffs.eatCostMult)}`,
+      `noEatPenalty ${format(this.state.buffs.noEatPenaltyMult)}`,
+    ];
+    this.refs.currentBuffsSummary.innerHTML = "";
+    for (const line of summaryLines) {
+      const row = document.createElement("p");
+      row.className = "current-buffs-summary-line";
+      row.textContent = line;
+      this.refs.currentBuffsSummary.append(row);
+    }
+
+    this.refs.currentBuffsHistory.innerHTML = "";
+    if (this.state.buffHistory.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "current-buffs-empty";
+      empty.textContent = "아직 선택한 카드가 없습니다.";
+      this.refs.currentBuffsHistory.append(empty);
+      return;
+    }
+    for (const card of this.state.buffHistory) {
+      const row = document.createElement("div");
+      row.className = "current-buffs-card-row";
+      const rarity = document.createElement("div");
+      rarity.className = `buff-card-rarity buff-card-rarity--${card.rarityLabel.toLowerCase()}`;
+      rarity.textContent = `${card.rarityLabel} (Stage ${card.milestone})`;
+      const buff = document.createElement("p");
+      buff.className = "buff-card-line buff-card-line--buff";
+      buff.textContent = formatBuffEffectLine(card.buff);
+      const debuff = document.createElement("p");
+      debuff.className = "buff-card-line buff-card-line--debuff";
+      debuff.textContent = formatBuffEffectLine(card.debuff);
+      row.append(rarity, buff, debuff);
+      this.refs.currentBuffsHistory.append(row);
+    }
   }
 
   private applyNickname(): void {
@@ -1277,6 +1544,7 @@ export class UiController {
   }
 
   private openAbandonConfirm(open: boolean): void {
+    if (open && this.isInputLocked) return;
     this.setOverlayOpen(this.refs.confirmOverlay, open);
   }
 
@@ -1292,6 +1560,7 @@ export class UiController {
   }
 
   private toggleMasterMute(): void {
+    if (this.isInputLocked && this.activeScreen === "game") return;
     this.settings = {
       ...this.settings,
       masterMuted: !this.settings.masterMuted,
@@ -1341,9 +1610,16 @@ export class UiController {
   private ensureRenderer(): void {
     if (this.renderer) return;
     this.renderer = new YuukaRenderer("render-host", this.settings);
+    this.renderer.onBackgroundTransitionStateChanged((isTransitioning) => {
+      this.cardManager.setTransitioning(isTransitioning);
+      if (!isTransitioning) {
+        void this.tryShowNextBuffCard();
+      }
+    });
   }
 
   private handleActionClick(runAction: () => StepResult): void {
+    if (this.isInputLocked) return;
     void this.bgmManager.unlock();
     const shouldStartCooldown = this.uiAnimController.onActionUserInput();
     this.handleStep(runAction());
@@ -1490,6 +1766,7 @@ export class UiController {
     this.renderLogs(forceLogRefresh);
     this.renderer?.render(this.state);
     if (this.activeScreen === "game") {
+      this.registerBuffMilestones(stage);
       const giantBgIndex = this.getGiantBgIndexForStage(stage);
       const stageIncreased = this.lastHapticStage !== null && stage > this.lastHapticStage;
       const bgTransitioned =
@@ -1505,6 +1782,7 @@ export class UiController {
       this.lastHapticStage = stage;
       this.lastHapticGiantBgIndex = giantBgIndex;
       this.updateBgmContext(stage);
+      void this.tryShowNextBuffCard();
     }
   }
 
@@ -1549,9 +1827,16 @@ export class UiController {
 
   private updateActionHints(stage: number): void {
     const workBaseGain = WORK_BASE_MONEY + this.state.day * WORK_DAY_SLOPE;
-    const workExpectedGain = Math.round(workBaseGain * (this.state.noaWorkCharges > 0 ? 1.5 : 1));
-    const eatExpectedCost = Math.round(EAT_BASE_COST + this.state.thighCm * EAT_COST_PER_CM);
-    const guestCost = getGuestCost(stage);
+    const workExpectedGain = Math.round(
+      workBaseGain *
+        (this.state.noaWorkCharges > 0 ? 1.5 : 1) *
+        this.state.buffs.creditGainMult,
+    );
+    const eatExpectedCost = Math.round(
+      (EAT_BASE_COST + this.state.thighCm * EAT_COST_PER_CM) *
+        this.state.buffs.eatCostMult,
+    );
+    const guestCost = Math.round(getGuestCost(stage) * this.state.buffs.guestCostMult);
 
     this.refs.actionHintWork.textContent = `+${this.creditNumberFormatter.format(workExpectedGain)}`;
     this.refs.actionHintEat.textContent = `-${this.creditNumberFormatter.format(eatExpectedCost)}`;

@@ -88,6 +88,8 @@ const en: Record<string, string> = {
   "log.eat": "Ate a meal: Credits -{credits} / Thigh +{thigh}cm / Stress -{stress}",
   "log.noMeal": "No meal today: Thigh -5%",
   "log.guest": "A guest arrived: {name} -> {effect}",
+  "log.buffCard.pick": "Buff card picked ({rarity}): {buff} / {debuff}",
+  "log.buffCard.skip": "Skipped the buff card.",
 
   // Guest names/effects
   "guest.teacher.name": "Teacher",
