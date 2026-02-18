@@ -5,6 +5,7 @@ import { applyEat, applyGuest, applyWork } from "../core/actions";
 import {
   applyCardToMultipliers,
   BUFF_CARD_STAGE_MILESTONES,
+  generateBuffCard,
   generateBuffCards,
 } from "../core/buffSystem";
 import { getGuestCheatEntries, type GuestOutcomeEffect } from "../core/guests";
@@ -53,6 +54,7 @@ import { loadSettings, saveSettings } from "../storage/settings";
 import { getEndingCondition, getEndingTitle } from "../shared/endingMeta";
 import { UiAnimController } from "./anim/uiAnimController";
 import { CardManager } from "./cardManager";
+import { CardSpinController } from "./cardSpinController";
 import { clearPanelTransition, hidePanelWithTransition, showPanelWithTransition } from "./transition/panelTransition";
 import { TransitionManager } from "./transition/transitionManager";
 import { hapticGameOver, hapticLobbyTap, hapticStageBgTransition, hapticStageUp } from "./haptics";
@@ -189,6 +191,13 @@ interface UploadedMeta {
   thigh: RankEntry;
 }
 
+interface BuffCardSlotView {
+  button: HTMLButtonElement;
+  rarity: HTMLDivElement;
+  buffLine: HTMLParagraphElement;
+  debuffLine: HTMLParagraphElement;
+}
+
 function sanitizeNickname(raw: string): string {
   const trimmed = raw.trim();
   const filtered = trimmed.replace(/[^A-Za-z0-9\u3131-\u318E\uAC00-\uD7A3 ]+/g, "");
@@ -219,6 +228,9 @@ const TURN_SLOT_KEYS = ["morning", "noon", "evening"] as const;
 const ACTION_INPUT_COOLDOWN_MS = 300;
 const ENDING_TRANSITION_DELAY_MS = 700;
 const PANEL_TRANSITION_DURATION_MS = 520;
+const FLIP_MS = 120;
+const BOUNCE_MS = 180;
+const SELECTED_CARD_FX_MS = 280;
 const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   work: "💼 ",
   eat: "🍚 ",
@@ -261,6 +273,9 @@ export class UiController {
   private isInputLocked = false;
   private processingBuffMilestones = false;
   private activeBuffCardChoices: BuffCardSelection[] | null = null;
+  private buffCardSlots: BuffCardSlotView[] = [];
+  private readonly cardSpinController: CardSpinController<BuffCardSelection>;
+  private spinAudioContext: AudioContext | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -270,6 +285,7 @@ export class UiController {
     this.endingCollection = getCollection();
     this.state = this.save.state;
     this.settings = loadSettings();
+    this.cardSpinController = this.createCardSpinController();
     this.bgmManager.setVolume(this.settings.bgmVolume, this.settings.masterMuted);
     this.initUiAnimators();
 
@@ -1236,6 +1252,13 @@ export class UiController {
         this.openCurrentBuffsOverlay(false);
       }
     });
+    this.refs.buffCardsOverlay.addEventListener("pointerdown", (event) => {
+      if (!this.cardSpinController.isSpinningNow()) return;
+      const target = event.target as HTMLElement;
+      if (target.closest("#btn-buff-card-skip")) return;
+      event.preventDefault();
+      this.cardSpinController.revealFinal();
+    });
   }
 
   private syncSettingsUi(): void {
@@ -1372,9 +1395,13 @@ export class UiController {
 
   private resetBuffCardUiState(): void {
     this.activeBuffCardChoices = null;
+    this.buffCardSlots = [];
+    this.cardSpinController.stop();
     this.cardManager.reset();
     this.setInputLocked(false);
-    this.setBuffCardControlsEnabled(false);
+    this.setBuffCardOptionsEnabled(false);
+    this.setBuffCardSkipEnabled(false);
+    this.refs.buffCardsOverlay.classList.remove("cards-spinning");
     clearPanelTransition(this.refs.buffCardsOverlay);
     this.refs.buffCardsOverlay.classList.add("hidden");
   }
@@ -1394,9 +1421,10 @@ export class UiController {
         this.cardManager.setCardOverlayActive(true);
         this.setInputLocked(true);
         this.renderBuffCardChoices(cards);
-        this.setBuffCardControlsEnabled(false);
+        this.setBuffCardOptionsEnabled(false);
+        this.setBuffCardSkipEnabled(true);
         await this.animateBuffCardOverlay(true);
-        this.setBuffCardControlsEnabled(true);
+        this.cardSpinController.startSpin(cards);
         break;
       }
     } finally {
@@ -1406,17 +1434,21 @@ export class UiController {
 
   private renderBuffCardChoices(cards: BuffCardSelection[]): void {
     this.refs.buffCardsList.innerHTML = "";
-    for (const card of cards) {
+    this.buffCardSlots = [];
+    cards.forEach((card, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "skin-button ui-btn ui-btn--secondary buff-card-option";
       button.addEventListener("click", () => {
-        void this.resolveBuffCardSelection(card.id);
+        if (this.cardSpinController.isSpinningNow()) {
+          return;
+        }
+        void this.resolveBuffCardSelection(cards[index]?.id);
       });
 
       const rarity = document.createElement("div");
-      rarity.className = `buff-card-rarity buff-card-rarity--${card.rarityLabel.toLowerCase()}`;
-      rarity.textContent = card.rarityLabel;
+      rarity.className = "buff-card-rarity buff-card-rarity--teaser";
+      rarity.textContent = "???";
 
       const buffLine = document.createElement("p");
       buffLine.className = "buff-card-line buff-card-line--buff";
@@ -1428,14 +1460,20 @@ export class UiController {
 
       button.append(rarity, buffLine, debuffLine);
       this.refs.buffCardsList.append(button);
-    }
+      this.buffCardSlots.push({ button, rarity, buffLine, debuffLine });
+    });
   }
 
   private async resolveBuffCardSelection(selectedCardId?: string): Promise<void> {
     const cards = this.activeBuffCardChoices;
     if (!cards) return;
-    this.setBuffCardControlsEnabled(false);
+    this.cardSpinController.stop();
+    this.setBuffCardOptionsEnabled(false);
+    this.setBuffCardSkipEnabled(false);
     const selected = selectedCardId ? cards.find((card) => card.id === selectedCardId) : undefined;
+    if (selectedCardId) {
+      await this.playSelectedCardMotion(selectedCardId);
+    }
 
     await this.animateBuffCardOverlay(false);
     this.cardManager.setCardOverlayActive(false);
@@ -1474,12 +1512,25 @@ export class UiController {
     void this.tryShowNextBuffCard();
   }
 
-  private setBuffCardControlsEnabled(enabled: boolean): void {
+  private async playSelectedCardMotion(selectedCardId: string): Promise<void> {
+    const cards = this.activeBuffCardChoices;
+    if (!cards) return;
+    const selectedIndex = cards.findIndex((card) => card.id === selectedCardId);
+    if (selectedIndex < 0) return;
+    const slot = this.buffCardSlots[selectedIndex];
+    if (!slot) return;
+    this.triggerCardAnimation(slot.button, "buff-card-option--selected", SELECTED_CARD_FX_MS);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, SELECTED_CARD_FX_MS));
+  }
+
+  private setBuffCardOptionsEnabled(enabled: boolean): void {
+    for (const slot of this.buffCardSlots) {
+      slot.button.disabled = !enabled;
+    }
+  }
+
+  private setBuffCardSkipEnabled(enabled: boolean): void {
     this.refs.btnBuffCardSkip.disabled = !enabled;
-    const optionButtons = this.refs.buffCardsList.querySelectorAll<HTMLButtonElement>(".buff-card-option");
-    optionButtons.forEach((button) => {
-      button.disabled = !enabled;
-    });
   }
 
   private async animateBuffCardOverlay(open: boolean): Promise<void> {
@@ -1493,23 +1544,124 @@ export class UiController {
     await new Promise<void>((resolve) => window.setTimeout(resolve, PANEL_TRANSITION_DURATION_MS));
   }
 
+  private createCardSpinController(): CardSpinController<BuffCardSelection> {
+    return new CardSpinController<BuffCardSelection>({
+      createDecoy: () => {
+        const stage = getStage(this.state.thighCm);
+        const milestone = this.activeBuffCardChoices?.[0]?.milestone ?? stage;
+        return generateBuffCard(milestone, this.state.day, stage, defaultRng.next01);
+      },
+      renderSlot: (slotIndex, card, mode) => {
+        this.renderBuffCardSlot(slotIndex, card, mode);
+      },
+      onSpinningStateChange: (spinning) => {
+        this.refs.buffCardsOverlay.classList.toggle("cards-spinning", spinning);
+      },
+      onAllStopped: () => {
+        this.setBuffCardOptionsEnabled(true);
+      },
+      onTick: () => {
+        this.playBuffSpinTickSound();
+      },
+      onStop: (slotIndex) => {
+        this.playBuffSpinStopSound();
+        const slot = this.buffCardSlots[slotIndex];
+        if (!slot) return;
+        this.triggerCardAnimation(slot.button, "spin-bounce", BOUNCE_MS);
+      },
+    });
+  }
+
+  private renderBuffCardSlot(slotIndex: number, card: BuffCardSelection, mode: "spin" | "final"): void {
+    const slot = this.buffCardSlots[slotIndex];
+    if (!slot) return;
+
+    if (mode === "spin") {
+      const teaserPool = ["???", "Common", "Uncommon", "Rare", "Epic", "Legendary"] as const;
+      const teaser = teaserPool[Math.floor(defaultRng.next01() * teaserPool.length)] ?? "???";
+      slot.rarity.className = "buff-card-rarity buff-card-rarity--teaser";
+      slot.rarity.textContent = teaser;
+      this.triggerCardAnimation(slot.button, "spin-flip", FLIP_MS);
+    } else {
+      slot.rarity.className = `buff-card-rarity buff-card-rarity--${card.rarityLabel.toLowerCase()}`;
+      slot.rarity.textContent = card.rarityLabel;
+    }
+
+    slot.buffLine.textContent = this.formatEffectLine(card.buff.key, card.buff.delta);
+    slot.debuffLine.textContent = this.formatEffectLine(card.debuff.key, card.debuff.delta);
+  }
+
+  private triggerCardAnimation(target: HTMLElement, className: string, durationMs: number): void {
+    target.classList.remove(className);
+    void target.offsetWidth;
+    target.classList.add(className);
+    window.setTimeout(() => {
+      target.classList.remove(className);
+    }, durationMs);
+  }
+
+  private playBuffSpinTickSound(): void {
+    this.playBuffSpinTone(880, 0.015, 0.016);
+  }
+
+  private playBuffSpinStopSound(): void {
+    this.playBuffSpinTone(520, 0.05, 0.028);
+  }
+
+  private playBuffSpinTone(frequency: number, durationSec: number, baseGain: number): void {
+    if (this.settings.masterMuted) return;
+    if (this.settings.sfxVolume <= 0) return;
+    try {
+      const AudioContextCtor = window.AudioContext
+        ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      if (!this.spinAudioContext) {
+        this.spinAudioContext = new AudioContextCtor();
+      }
+      const ctx = this.spinAudioContext;
+      if (ctx.state === "suspended") {
+        void ctx.resume().catch(() => undefined);
+      }
+      const now = ctx.currentTime;
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      const scaledGain = Math.min(0.06, Math.max(0, baseGain * this.settings.sfxVolume));
+      oscillator.type = "square";
+      oscillator.frequency.setValueAtTime(frequency, now);
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(scaledGain, now + 0.005);
+      gainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.start(now);
+      oscillator.stop(now + durationSec + 0.01);
+    } catch {
+      // Ignore audio failures (autoplay policy / unsupported platform).
+    }
+  }
+
   private renderCurrentBuffsOverlay(): void {
     const formatMult = (value: number): string => `x${value.toFixed(2)}`;
-    const summaryLines = [
-      `${t("buff.creditGain")} ${formatMult(this.state.buffs.creditGainMult)}`,
-      `${t("buff.thighGain")} ${formatMult(this.state.buffs.thighGainMult)}`,
-      `${t("buff.stressGain")} ${formatMult(this.state.buffs.stressGainMult)}`,
-      `${t("buff.makiProb")} ${formatMult(this.state.buffs.makiWinProbMult)}`,
-      `${t("buff.koyukiProb")} ${formatMult(this.state.buffs.koyukiWinProbMult)}`,
-      `${t("buff.guestCost")} ${formatMult(this.state.buffs.guestCostMult)}`,
-      `${t("buff.eatCost")} ${formatMult(this.state.buffs.eatCostMult)}`,
-      `${t("buff.noEatPenalty")} ${formatMult(this.state.buffs.noEatPenaltyMult)}`,
+    const summaryItems = [
+      { label: t("buff.creditGain"), value: this.state.buffs.creditGainMult },
+      { label: t("buff.thighGain"), value: this.state.buffs.thighGainMult },
+      { label: t("buff.stressGain"), value: this.state.buffs.stressGainMult },
+      { label: t("buff.makiProb"), value: this.state.buffs.makiWinProbMult },
+      { label: t("buff.koyukiProb"), value: this.state.buffs.koyukiWinProbMult },
+      { label: t("buff.guestCost"), value: this.state.buffs.guestCostMult },
+      { label: t("buff.eatCost"), value: this.state.buffs.eatCostMult },
+      { label: t("buff.noEatPenalty"), value: this.state.buffs.noEatPenaltyMult },
     ];
     this.refs.currentBuffsSummary.innerHTML = "";
-    for (const line of summaryLines) {
+    for (const item of summaryItems) {
       const row = document.createElement("p");
       row.className = "current-buffs-summary-line";
-      row.textContent = line;
+      if (item.value > 1) {
+        row.classList.add("current-buffs-summary-line--up");
+      } else if (item.value < 1) {
+        row.classList.add("current-buffs-summary-line--down");
+      }
+      row.textContent = `${item.label} ${formatMult(item.value)}`;
       this.refs.currentBuffsSummary.append(row);
     }
   }

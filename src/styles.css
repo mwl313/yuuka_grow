@@ -876,6 +876,10 @@ textarea {
   z-index: 25;
 }
 
+.buff-cards-overlay.cards-spinning .buff-card-option {
+  pointer-events: none;
+}
+
 .buff-cards-panel {
   width: min(560px, 96vw);
   max-height: min(72vh, 620px);
@@ -935,6 +939,11 @@ textarea {
   color: #92400e;
 }
 
+.buff-card-rarity--teaser {
+  background: rgba(15, 22, 36, 0.1);
+  color: #5b657a;
+}
+
 .buff-card-line {
   margin: 0;
   font-size: 14px;
@@ -947,6 +956,56 @@ textarea {
 
 .buff-card-line--debuff {
   color: #c93a3a;
+}
+
+.buff-card-option--selected {
+  animation: buff-card-select-pop 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes buff-card-select-pop {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  }
+  45% {
+    transform: scale(1.04) translateY(-2px);
+    box-shadow:
+      0 0 0 3px rgba(71, 198, 255, 0.24),
+      0 12px 22px rgba(0, 0, 0, 0.22);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  }
+}
+
+.spin-flip {
+  animation: spin-flip 120ms ease-out;
+}
+
+.spin-bounce {
+  animation: spin-bounce 180ms ease-out;
+}
+
+@keyframes spin-flip {
+  0% {
+    transform: rotateY(12deg) scale(1);
+  }
+  100% {
+    transform: rotateY(0deg) scale(1);
+  }
+}
+
+@keyframes spin-bounce {
+  0% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-3px);
+  }
+  100% {
+    transform: translateY(0);
+  }
 }
 
 .card-modal-title {
@@ -1005,9 +1064,19 @@ textarea {
 
 .current-buffs-summary-line {
   margin: 0;
-  font-size: 13px;
+  font-family: var(--font-title);
+  font-size: 15px;
+  font-weight: 700;
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
+}
+
+.current-buffs-summary-line--up {
+  color: #1a8f3a;
+}
+
+.current-buffs-summary-line--down {
+  color: #c93a3a;
 }
 
 .overlay.overlay--enter-rise .panel-transition-card {

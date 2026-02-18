@@ -101,17 +101,6 @@ const BUFF_RANGE_CONFIG: Record<BuffKey, BuffRangeConfig> = {
   },
 };
 
-const EFFECT_LABELS_KO: Record<BuffKey, string> = {
-  creditGainMult: "크레딧 획득",
-  thighGainMult: "허벅지 증가",
-  stressGainMult: "스트레스 증가",
-  koyukiWinProbMult: "코유키 성공 확률",
-  makiWinProbMult: "마키 성공 확률",
-  guestCostMult: "게스트 비용",
-  eatCostMult: "밥 비용",
-  noEatPenaltyMult: "무식사 패널티",
-};
-
 export const BUFF_CARD_STAGE_MILESTONES = [5, 10, 15, 19, 23, 27, 31, 35, 39] as const;
 
 export function createInitialBuffMultipliers(): BuffMultipliers {
@@ -182,43 +171,52 @@ export function generateBuffCards(
   const cards: BuffCardSelection[] = [];
 
   for (let index = 0; index < 3; index += 1) {
-    const buffKey = randomBuffKey(rng01);
-    let debuffKey = randomBuffKey(rng01);
-    while (debuffKey === buffKey) {
-      debuffKey = randomBuffKey(rng01);
-    }
-
-    const buff = createEffect(buffKey, true, rng01);
-    const debuff = createEffect(debuffKey, false, rng01);
-    const buffConfig = BUFF_RANGE_CONFIG[buff.key];
-    const debuffConfig = BUFF_RANGE_CONFIG[debuff.key];
-    const buffScore = toScoreFromMagnitude(
-      Math.abs(buff.delta),
-      buffConfig.beneficialMin,
-      buffConfig.beneficialMax,
-      true,
-    );
-    const debuffScore = toScoreFromMagnitude(
-      Math.abs(debuff.delta),
-      debuffConfig.harmfulMin,
-      debuffConfig.harmfulMax,
-      false,
-    );
-    const rarityScore = buffScore + debuffScore;
-
-    cards.push({
-      id: buildCardId(rng01),
-      rarityScore,
-      rarityLabel: rarityFromScore(rarityScore),
-      buff,
-      debuff,
-      milestone,
-      selectedAtDay: day,
-      selectedAtStage: stage,
-    });
+    cards.push(generateBuffCard(milestone, day, stage, rng01));
   }
 
   return cards;
+}
+
+export function generateBuffCard(
+  milestone: number,
+  day: number,
+  stage: number,
+  rng01: () => number,
+): BuffCardSelection {
+  const buffKey = randomBuffKey(rng01);
+  let debuffKey = randomBuffKey(rng01);
+  while (debuffKey === buffKey) {
+    debuffKey = randomBuffKey(rng01);
+  }
+
+  const buff = createEffect(buffKey, true, rng01);
+  const debuff = createEffect(debuffKey, false, rng01);
+  const buffConfig = BUFF_RANGE_CONFIG[buff.key];
+  const debuffConfig = BUFF_RANGE_CONFIG[debuff.key];
+  const buffScore = toScoreFromMagnitude(
+    Math.abs(buff.delta),
+    buffConfig.beneficialMin,
+    buffConfig.beneficialMax,
+    true,
+  );
+  const debuffScore = toScoreFromMagnitude(
+    Math.abs(debuff.delta),
+    debuffConfig.harmfulMin,
+    debuffConfig.harmfulMax,
+    false,
+  );
+  const rarityScore = buffScore + debuffScore;
+
+  return {
+    id: buildCardId(rng01),
+    rarityScore,
+    rarityLabel: rarityFromScore(rarityScore),
+    buff,
+    debuff,
+    milestone,
+    selectedAtDay: day,
+    selectedAtStage: stage,
+  };
 }
 
 export function applyCardToMultipliers(
@@ -242,11 +240,3 @@ export function getNoEatEffectiveFactor(noEatPenaltyMult: number, baseFactor: nu
 export function getAdjustedWinProbability(baseProbability: number, probabilityMult: number): number {
   return clamp01(baseProbability * Math.max(0, probabilityMult));
 }
-
-export function formatBuffEffectLine(effect: BuffCardEffect): string {
-  const label = EFFECT_LABELS_KO[effect.key] ?? effect.key;
-  const percent = `${Math.round(Math.abs(effect.delta) * 100)}%`;
-  const prefix = effect.delta >= 0 ? "+" : "-";
-  return `${prefix}${label} ${percent}`;
-}
-
