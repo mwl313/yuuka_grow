@@ -718,8 +718,10 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
 	const bestTopText = bestTop.toFixed(1);
 	const ogTitle = "유우카 키우기";
 	const ogDescription = `${row.nickname}님은 상위 ${bestTopText}%입니다`;
+	const ogImage = "https://yuukagrowdist.pages.dev/assets/yuuka/yuuka_head.png";
 	const escapedTitle = escapeHtml(ogTitle);
 	const escapedDescription = escapeHtml(ogDescription);
+	const escapedOgImage = escapeHtml(ogImage);
 	const escapedNickname = escapeHtml(row.nickname);
 	const escapedEnding = escapeHtml(endingTitle);
 
@@ -731,6 +733,9 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
   <meta property="og:title" content="${escapedTitle}" />
   <meta property="og:description" content="${escapedDescription}" />
   <meta property="og:type" content="website" />
+  <meta property="og:image" content="${escapedOgImage}" />
+  <meta property="og:image:width" content="500" />
+  <meta property="og:image:height" content="500" />
   <title>${escapedTitle}</title>
   <style>
     * { box-sizing: border-box; }
