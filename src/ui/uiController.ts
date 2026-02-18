@@ -205,6 +205,17 @@ function sanitizeNickname(raw: string): string {
   return clipped.length > 0 ? clipped : DEFAULT_NICKNAME;
 }
 
+function formatRankLine(entry: RankEntry): { percent: string; rank: string; total: string } {
+  const percent = Number.isFinite(entry.percentileTop ?? NaN) ? Number(entry.percentileTop).toFixed(1) : "?";
+  const rank = Number.isFinite(entry.rank ?? NaN) ? formatNumber(Number(entry.rank)) : "?";
+  const total = Number.isFinite(entry.total ?? NaN) ? formatNumber(Number(entry.total)) : "?";
+  return {
+    percent,
+    rank,
+    total,
+  };
+}
+
 function createRunId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -2219,20 +2230,15 @@ export class UiController {
     this.refs.btnUploadShare.disabled = this.isUploading || !this.latestResult;
 
     if (this.uploadedMeta) {
-      const nickname = this.settings.nickname.trim() || DEFAULT_NICKNAME;
-      const creditTop = Number.isFinite(this.uploadedMeta.credit.percentileTop ?? NaN)
-        ? Number(this.uploadedMeta.credit.percentileTop)
-        : 100;
-      const thighTop = Number.isFinite(this.uploadedMeta.thigh.percentileTop ?? NaN)
-        ? Number(this.uploadedMeta.thigh.percentileTop)
-        : 100;
-      const bestTop = Math.min(creditTop, thighTop);
-      const bestTopText = bestTop.toFixed(1);
-      this.refs.scoreRankCreditPopup.textContent = `${nickname}님은 상위 ${bestTopText}%입니다`;
-      this.refs.scoreRankThighPopup.textContent = "";
+      const credit = formatRankLine(this.uploadedMeta.credit);
+      const thigh = formatRankLine(this.uploadedMeta.thigh);
+      this.refs.scoreRankCreditPopup.textContent = t("score.rank.credit", credit);
+      this.refs.scoreRankThighPopup.textContent = t("score.rank.thigh", thigh);
     } else {
-      this.refs.scoreRankCreditPopup.textContent = "";
-      this.refs.scoreRankThighPopup.textContent = "";
+      const pendingCredit = t("score.rank.pending.credit");
+      const pendingThigh = t("score.rank.pending.thigh");
+      this.refs.scoreRankCreditPopup.textContent = pendingCredit;
+      this.refs.scoreRankThighPopup.textContent = pendingThigh;
     }
 
     this.refs.scoreUploadStatus.textContent = messageKey ? t(messageKey) : "";
@@ -2285,19 +2291,15 @@ export class UiController {
   private buildShareText(): string {
     if (!this.latestResult) return t("score.share.text.base");
     if (!this.uploadedMeta) return t("score.share.text.base");
+    const nickname = this.settings.nickname.trim() || DEFAULT_NICKNAME;
     const creditTop = Number.isFinite(this.uploadedMeta.credit.percentileTop ?? NaN)
-      ? Number(this.uploadedMeta.credit.percentileTop).toFixed(1)
-      : "?";
+      ? Number(this.uploadedMeta.credit.percentileTop)
+      : 100;
     const thighTop = Number.isFinite(this.uploadedMeta.thigh.percentileTop ?? NaN)
-      ? Number(this.uploadedMeta.thigh.percentileTop).toFixed(1)
-      : "?";
-    return t("score.share.text.withRank", {
-      nickname: this.settings.nickname,
-      credits: formatNumber(this.latestResult.finalMoney),
-      thigh: formatNumber(this.latestResult.finalThighCm),
-      creditTop,
-      thighTop,
-    });
+      ? Number(this.uploadedMeta.thigh.percentileTop)
+      : 100;
+    const bestTopText = Math.min(creditTop, thighTop).toFixed(1);
+    return `${nickname}님은 상위 ${bestTopText}%입니다`;
   }
 
   private async shareResult(): Promise<void> {
