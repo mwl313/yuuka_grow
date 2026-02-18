@@ -102,8 +102,8 @@ const ja: Record<string, string> = {
   "guest.effect.aris": "太もも +12% / クレジット +15%",
   "guest.effect.rio": "クレジット +12% / ストレス +12",
   "guest.effect.noa": "クレジット +5% / ストレス -5 / 仕事強化3回",
-  "guest.effect.maki.success": "大当たりだよ: 太もも +14% / クレジット +15% / ストレス +10",
-  "guest.effect.maki.slip": "予想外だったよ: 太もも -8% / クレジット +10% / ストレス -5",
+  "guest.effect.maki.success": "大当たりだよ: 太もも +45% / ストレス -5",
+  "guest.effect.maki.slip": "予想外だったよ: 太もも -30% / ストレス -5",
   "guest.effect.koyuki.jackpot": "ジャックポットだよ: クレジット +80% / ストレス +20",
   "guest.effect.koyuki.loss": "予想外だったよ: クレジット -50% / 太もも +6% / ストレス +20",
 

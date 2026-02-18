@@ -20,6 +20,7 @@ import {
 } from "../core/constants";
 import { checkImmediateBankrupt, toBaseEndCategory } from "../core/endings";
 import { ENDING_DEFS, selectEnding } from "../core/endingsTable";
+import { getGuestCost } from "../core/guestCost";
 import { decodeLog } from "../core/logger";
 import { defaultRng } from "../core/rng";
 import { getStage } from "../core/stage";
@@ -1484,7 +1485,7 @@ export class UiController {
     this.refs.btnWork.disabled = this.state.actionsRemaining <= 0;
     this.refs.btnEat.disabled = this.state.actionsRemaining <= 0;
     this.refs.btnGuest.disabled = this.state.actionsRemaining <= 0;
-    this.updateActionHints();
+    this.updateActionHints(stage);
 
     this.renderLogs(forceLogRefresh);
     this.renderer?.render(this.state);
@@ -1546,14 +1547,15 @@ export class UiController {
     }
   }
 
-  private updateActionHints(): void {
+  private updateActionHints(stage: number): void {
     const workBaseGain = WORK_BASE_MONEY + this.state.day * WORK_DAY_SLOPE;
     const workExpectedGain = Math.round(workBaseGain * (this.state.noaWorkCharges > 0 ? 1.5 : 1));
     const eatExpectedCost = Math.round(EAT_BASE_COST + this.state.thighCm * EAT_COST_PER_CM);
+    const guestCost = getGuestCost(stage);
 
     this.refs.actionHintWork.textContent = `+${this.creditNumberFormatter.format(workExpectedGain)}`;
     this.refs.actionHintEat.textContent = `-${this.creditNumberFormatter.format(eatExpectedCost)}`;
-    this.refs.actionHintGuest.textContent = "";
+    this.refs.actionHintGuest.textContent = `-${this.creditNumberFormatter.format(guestCost)}`;
   }
 
   private updateStressDangerState(stress: number, stress100Days: number): void {

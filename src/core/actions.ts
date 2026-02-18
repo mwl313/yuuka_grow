@@ -20,7 +20,9 @@ import {
   EAT_SLOT_NOON_MASK,
 } from "./endingsTable";
 import { applyRandomGuestEffect } from "./guests";
+import { getGuestCost } from "./guestCost";
 import { pushLog } from "./logger";
+import { getStage } from "./stage";
 import type { GameState, Rng, RunResult, StepResult } from "./types";
 
 function normalizeAfterAction(state: GameState): GameState {
@@ -135,7 +137,13 @@ export function applyEat(state: GameState): StepResult {
 }
 
 export function applyGuest(state: GameState, rng: Rng): StepResult {
-  const guestResult = applyRandomGuestEffect(state, rng);
+  const stage = getStage(state.thighCm);
+  const guestCost = getGuestCost(stage);
+  const paidState: GameState = {
+    ...state,
+    money: state.money - guestCost,
+  };
+  const guestResult = applyRandomGuestEffect(paidState, rng);
   const nextGuestState: GameState = {
     ...guestResult.state,
     guestCounts: {

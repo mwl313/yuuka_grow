@@ -841,7 +841,7 @@ textarea {
 }
 
 .action-hint--guest {
-  opacity: 0.35;
+  color: #c93a3a;
 }
 
 .overlay {

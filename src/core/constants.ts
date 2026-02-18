@@ -25,6 +25,10 @@ export const EAT_COST_PER_CM = 1.5;
 export const EAT_STRESS_REDUCE = 12;
 export const EAT_BASE_GAIN_CM = 4;
 export const EAT_GAIN_FACTOR = 0.006;
+export const GUEST_COST_BASE = 800;
+export const GUEST_COST_KINK_STAGE = 20;
+export const GUEST_COST_SLOPE_PRE = 130;
+export const GUEST_COST_SLOPE_POST = 60;
 
 export const STRESS_END_CONSECUTIVE_DAYS = 10;
 export const NO_MEAL_MULTIPLIER = 0.95;
@@ -33,11 +37,11 @@ export const NOA_WORK_CHARGES = 3;
 export const STAGE_THRESHOLDS = [
   53, 70, 92, 122, 161, 212, 280, 370, 488, 644, 850, 1122, 1481, 1954, 2579,
 ];
-export const STAGE_GROWTH_FACTOR_AFTER_MAX = 1.32;
-
-export const STRESS_BAND_STABLE_MAX = 29;
-export const STRESS_BAND_NEUTRAL_MAX = 59;
-export const STRESS_BAND_RISKY_MAX = 79;
+export const STAGE_GROWTH_FACTOR_AFTER_MAX = 1.15;
+export const GUEST_STRESS_BAND_0_MAX = 24;
+export const GUEST_STRESS_BAND_1_MAX = 49;
+export const GUEST_STRESS_BAND_2_MAX = 74;
+export const GUEST_STRESS_BAND_3_MAX = 99;
 
 export const GUEST_TEACHER_THIGH_PCT = 0.08;
 export const GUEST_TEACHER_STRESS_DELTA = -15;
@@ -54,12 +58,9 @@ export const GUEST_RIO_STRESS_DELTA = 12;
 export const GUEST_NOA_MONEY_PCT = 0.05;
 export const GUEST_NOA_STRESS_DELTA = -5;
 
-export const GUEST_MAKI_SUCCESS_THIGH_PCT = 0.14;
-export const GUEST_MAKI_SUCCESS_MONEY_PCT = 0.15;
-export const GUEST_MAKI_SUCCESS_STRESS_DELTA = 10;
-export const GUEST_MAKI_SLIP_THIGH_PCT = -0.08;
-export const GUEST_MAKI_SLIP_MONEY_PCT = 0.1;
-export const GUEST_MAKI_SLIP_STRESS_DELTA = -5;
+export const MAKI_THIGH_PCT_WIN = 45;
+export const MAKI_THIGH_PCT_LOSE = -30;
+export const MAKI_STRESS_DELTA = -5;
 
 export const GUEST_KOYUKI_COMMON_STRESS_DELTA = 20;
 export const GUEST_KOYUKI_JACKPOT_MONEY_PCT = 0.8;
@@ -72,50 +73,22 @@ export const OUTCOME_SLIP = "slip";
 export const OUTCOME_JACKPOT = "jackpot";
 export const OUTCOME_LOSS = "loss";
 
-export const STRESS_BAND_STABLE = "stable";
-export const STRESS_BAND_NEUTRAL = "neutral";
-export const STRESS_BAND_RISKY = "risky";
-export const STRESS_BAND_GAMBLING = "gambling";
-
-export const GUEST_WEIGHT_STABLE = {
-  teacher: 5,
-  aris: 5,
-  noa: 4,
-  momoi: 3,
-  rio: 2,
-  maki: 2,
-  koyuki: 1,
-} as const;
-
-export const GUEST_WEIGHT_NEUTRAL = {
-  teacher: 3,
-  aris: 4,
-  noa: 3,
-  momoi: 4,
-  rio: 3,
-  maki: 3,
-  koyuki: 2,
-} as const;
-
-export const GUEST_WEIGHT_RISKY = {
-  teacher: 2,
-  aris: 3,
-  noa: 2,
-  momoi: 4,
-  rio: 4,
-  maki: 4,
-  koyuki: 3,
-} as const;
-
-export const GUEST_WEIGHT_GAMBLING = {
-  teacher: 1,
-  aris: 2,
-  noa: 1,
-  momoi: 4,
-  rio: 4,
-  maki: 5,
-  koyuki: 5,
-} as const;
+export const GUEST_WEIGHT_ORDER_BY_STRESS = [
+  "teacher",
+  "noa",
+  "aris",
+  "rio",
+  "momoi",
+  "maki",
+  "koyuki",
+] as const;
+export const GUEST_WEIGHTS_BY_STRESS_BAND = [
+  [6, 6, 5, 2, 3, 1, 1],
+  [5, 5, 5, 3, 3, 2, 2],
+  [4, 4, 4, 4, 3, 3, 3],
+  [3, 3, 3, 4, 3, 4, 4],
+  [2, 2, 2, 4, 3, 5, 5],
+] as const;
 
 export const GUEST_IDS = [
   "teacher",

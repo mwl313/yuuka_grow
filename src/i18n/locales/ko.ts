@@ -102,8 +102,8 @@ const ko: Record<string, string> = {
   "guest.effect.aris": "허벅지 +12% / 크레딧 +15%",
   "guest.effect.rio": "크레딧 +12% / 스트레스 +12",
   "guest.effect.noa": "크레딧 +5% / 스트레스 -5 / 업무 3회 강화",
-  "guest.effect.maki.success": "대박이 났다: 허벅지 +14% / 크레딧 +15% / 스트레스 +10",
-  "guest.effect.maki.slip": "예상과 달랐다: 허벅지 -8% / 크레딧 +10% / 스트레스 -5",
+  "guest.effect.maki.success": "대박이 났다: 허벅지 +45% / 스트레스 -5",
+  "guest.effect.maki.slip": "예상과 달랐다: 허벅지 -30% / 스트레스 -5",
   "guest.effect.koyuki.jackpot": "대박이 났다: 크레딧 +80% / 스트레스 +20",
   "guest.effect.koyuki.loss": "예상과 달랐다: 크레딧 -50% / 허벅지 +6% / 스트레스 +20",
 

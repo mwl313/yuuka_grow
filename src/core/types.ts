@@ -10,7 +10,7 @@ export type GuestId =
   | "maki"
   | "koyuki";
 export type GuestOutcomeId = "default" | "success" | "slip" | "jackpot" | "loss";
-export type StressBandId = "stable" | "neutral" | "risky" | "gambling";
+export type StressBandId = 0 | 1 | 2 | 3 | 4;
 export type LanguageCode = "ko" | "en" | "ja";
 export type ActionSlotId = "morning" | "noon" | "evening";
 export type LogKind = "work" | "eat" | "guest" | "system";

@@ -1,40 +1,48 @@
 import {
-  GUEST_IDS,
-  GUEST_WEIGHT_GAMBLING,
-  GUEST_WEIGHT_NEUTRAL,
-  GUEST_WEIGHT_RISKY,
-  GUEST_WEIGHT_STABLE,
-  STRESS_BAND_GAMBLING,
-  STRESS_BAND_NEUTRAL,
-  STRESS_BAND_RISKY,
-  STRESS_BAND_STABLE,
-  STRESS_BAND_NEUTRAL_MAX,
-  STRESS_BAND_RISKY_MAX,
-  STRESS_BAND_STABLE_MAX,
+  GUEST_STRESS_BAND_0_MAX,
+  GUEST_STRESS_BAND_1_MAX,
+  GUEST_STRESS_BAND_2_MAX,
+  GUEST_STRESS_BAND_3_MAX,
+  GUEST_WEIGHT_ORDER_BY_STRESS,
+  GUEST_WEIGHTS_BY_STRESS_BAND,
 } from "./constants";
-import { weightedPick } from "./rng";
-import type { GuestId, Rng, StressBandId, WeightedItem } from "./types";
+import type { GuestId, Rng, StressBandId } from "./types";
 
 export function getStressBand(stress: number): StressBandId {
-  if (stress <= STRESS_BAND_STABLE_MAX) return STRESS_BAND_STABLE;
-  if (stress <= STRESS_BAND_NEUTRAL_MAX) return STRESS_BAND_NEUTRAL;
-  if (stress <= STRESS_BAND_RISKY_MAX) return STRESS_BAND_RISKY;
-  return STRESS_BAND_GAMBLING;
+  if (stress <= GUEST_STRESS_BAND_0_MAX) return 0;
+  if (stress <= GUEST_STRESS_BAND_1_MAX) return 1;
+  if (stress <= GUEST_STRESS_BAND_2_MAX) return 2;
+  if (stress <= GUEST_STRESS_BAND_3_MAX) return 3;
+  return 4;
 }
 
-function getBandWeights(band: StressBandId): Record<GuestId, number> {
-  if (band === STRESS_BAND_STABLE) return { ...GUEST_WEIGHT_STABLE };
-  if (band === STRESS_BAND_NEUTRAL) return { ...GUEST_WEIGHT_NEUTRAL };
-  if (band === STRESS_BAND_RISKY) return { ...GUEST_WEIGHT_RISKY };
-  return { ...GUEST_WEIGHT_GAMBLING };
+export function weightedPick<T extends string>(
+  keys: readonly T[],
+  weights: readonly number[],
+  rng: () => number = Math.random,
+): T {
+  if (keys.length === 0 || keys.length !== weights.length) {
+    throw new Error("weightedPick requires same-length non-empty keys/weights");
+  }
+
+  const total = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0);
+  if (total <= 0) {
+    const uniformIndex = Math.floor(rng() * keys.length);
+    return keys[Math.min(uniformIndex, keys.length - 1)];
+  }
+
+  const point = rng() * total;
+  let cumulative = 0;
+  for (let i = 0; i < keys.length; i += 1) {
+    cumulative += Math.max(0, weights[i]);
+    if (cumulative >= point) return keys[i];
+  }
+  return keys[keys.length - 1];
 }
 
 export function pickGuestByStress(stress: number, rng: Rng): GuestId {
   const band = getStressBand(stress);
-  const bandWeights = getBandWeights(band);
-  const weightedGuests: WeightedItem<GuestId>[] = GUEST_IDS.map((guestId) => ({
-    item: guestId,
-    weight: bandWeights[guestId],
-  }));
-  return weightedPick(rng.next01, weightedGuests);
+  const keys = GUEST_WEIGHT_ORDER_BY_STRESS as readonly GuestId[];
+  const weights = GUEST_WEIGHTS_BY_STRESS_BAND[band];
+  return weightedPick(keys, weights, rng.next01);
 }

@@ -102,8 +102,8 @@ const en: Record<string, string> = {
   "guest.effect.aris": "Thigh +12% / Credits +15%",
   "guest.effect.rio": "Credits +12% / Stress +12",
   "guest.effect.noa": "Credits +5% / Stress -5 / Work buff x3",
-  "guest.effect.maki.success": "Big win: Thigh +14% / Credits +15% / Stress +10",
-  "guest.effect.maki.slip": "Unexpected result: Thigh -8% / Credits +10% / Stress -5",
+  "guest.effect.maki.success": "Big win: Thigh +45% / Stress -5",
+  "guest.effect.maki.slip": "Unexpected result: Thigh -30% / Stress -5",
   "guest.effect.koyuki.jackpot": "Jackpot: Credits +80% / Stress +20",
   "guest.effect.koyuki.loss": "Unexpected result: Credits -50% / Thigh +6% / Stress +20",
 
