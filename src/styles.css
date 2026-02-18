@@ -219,7 +219,7 @@ textarea {
   color: var(--text-0);
   font-size: 16px;
   font-weight: 700;
-  padding: 10px 14px;
+  padding: 11px 16px;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
   transition:
@@ -445,6 +445,11 @@ textarea {
   width: 100%;
   margin: 0 auto;
   padding: 18px;
+}
+
+#ending-overlay .modal-card,
+#ending-condition-overlay .modal-card {
+  padding: 24px 22px;
 }
 
 .lobby-card {
@@ -1469,6 +1474,15 @@ textarea {
   margin: 0;
   line-height: 1.5;
   white-space: pre-line;
+}
+
+#ending-desc {
+  margin: 0;
+  line-height: 1.55;
+  white-space: pre-line;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .leaderboard-sort {

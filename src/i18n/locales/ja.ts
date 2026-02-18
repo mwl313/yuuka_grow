@@ -49,7 +49,7 @@ const ja: Record<string, string> = {
   "guide.title": "ガイド",
   "guide.body": "最強で冷徹な会計士ユウカを育てよう！\n\n目標はブラック企業ミレニアムで100日生き残ること！\n\n行動\n\n1日に合計3回行動できる！\n\n💼 働く: クレジット ↑ / ストレス ↑\n\n🍚 ごはん: クレジット ↓ / 太もも ↑ / ストレス ↓\n\n🎲 ゲスト: ランダム効果を持つ当番を呼ぶ\n\n注意\n\n1日まったく食べないと、太ももサイズが下がる！\n\nストレス100が10日以上続くとゲームオーバー！\n\nミレニアムが破産してもゲームオーバー！",
   "cheatsheet.title": "ゲスト早見表",
-  "cheatsheet.note": "ゲストは行動を1消費。ストレスが高いほど不利な結果が出やすい。",
+  "cheatsheet.note": "ストレスが高いほど、ギャンブル性の高いゲストが出現します。",
   "cheatsheet.close": "閉じる",
   "cheatsheet.stat.thigh": "太もも",
   "cheatsheet.stat.credit": "クレジット",

@@ -49,7 +49,7 @@ const en: Record<string, string> = {
   "guide.title": "Guide",
   "guide.body": "Raise Yuuka, the ultimate cold-blooded accountant!\n\nYour goal is to survive 100 days in black-company Millennium!\n\nActions\n\nYou can act 3 times per day!\n\n💼 Work: Credits ↑ / Stress ↑\n\n🍚 Eat: Credits ↓ / Thigh ↑ / Stress ↓\n\n🎲 Guest: Summon a duty member with a random effect\n\nCaution\n\nIf you do not eat at all during the day, thigh size goes down!\n\nIf Stress 100 lasts for 10 days or more, game over!\n\nIf Millennium goes bankrupt, that's also game over!",
   "cheatsheet.title": "Guest Cheat Sheet",
-  "cheatsheet.note": "Guests consume 1 action. Higher stress increases the chance of bad outcomes.",
+  "cheatsheet.note": "Higher stress makes more gambling-heavy guests appear.",
   "cheatsheet.close": "Close",
   "cheatsheet.stat.thigh": "Thigh",
   "cheatsheet.stat.credit": "Credit",
