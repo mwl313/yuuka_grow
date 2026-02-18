@@ -723,6 +723,7 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
 	const escapedDescription = escapeHtml(ogDescription);
 	const escapedOgImage = escapeHtml(ogImage);
 	const escapedNickname = escapeHtml(row.nickname);
+	const escapedScoreTitle = escapeHtml(`${row.nickname}'s Score`);
 	const escapedEnding = escapeHtml(endingTitle);
 
 	const html = `<!doctype html>
@@ -769,16 +770,23 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
       display: grid;
       gap: 14px;
     }
+    .share-header {
+      margin: -20px -20px 0;
+      padding: 16px 20px 14px;
+      background: rgba(15, 22, 36, 0.04);
+      border-bottom: 1px solid rgba(15, 22, 36, 0.12);
+      border-top-left-radius: 18px;
+      border-top-right-radius: 18px;
+    }
     .title {
       margin: 0;
       font-size: clamp(1.25rem, 2.2vw, 1.6rem);
       font-weight: 800;
       letter-spacing: 0.01em;
-    }
-    .subtitle {
-      margin: 0;
-      color: #4a5568;
-      font-size: 0.95rem;
+      text-decoration: underline;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 6px;
+      text-decoration-color: rgba(71, 198, 255, 0.65);
     }
     .stats-list,
     .top-list {
@@ -837,8 +845,9 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
   <main>
     <section class="card">
       <div class="card-inner">
-        <h1 class="title">${escapedNickname}</h1>
-        <p class="subtitle">Yuuka Grow Share</p>
+        <header class="share-header">
+          <h1 class="title">${escapedScoreTitle}</h1>
+        </header>
         <dl class="stats-list">
           <div class="stat-row"><dt>Ending</dt><dd>${escapedEnding}</dd></div>
           <div class="stat-row"><dt>Days</dt><dd>${row.survival_days}</dd></div>
