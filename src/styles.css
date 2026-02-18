@@ -820,6 +820,21 @@ textarea {
   background: transparent;
 }
 
+.game-controls .action-bankrupt-risk {
+  color: #c93a3a;
+  animation: action-bankrupt-blink 0.7s ease-in-out infinite;
+}
+
+@keyframes action-bankrupt-blink {
+  0%,
+  100% {
+    color: #c93a3a;
+  }
+  50% {
+    color: #ff9da0;
+  }
+}
+
 .action-hints {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

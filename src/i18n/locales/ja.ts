@@ -88,6 +88,7 @@ const ja: Record<string, string> = {
   "game.action.work": "働く",
   "game.action.eat": "ごはん",
   "game.action.guest": "ゲスト",
+  "actionHint.credits": "{sign}{value}クレジット",
   "action.work": "働く",
   "action.eat": "ごはん",
   "action.guest": "ゲスト",

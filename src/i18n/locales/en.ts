@@ -88,6 +88,7 @@ const en: Record<string, string> = {
   "game.action.work": "Work",
   "game.action.eat": "Eat",
   "game.action.guest": "Guest",
+  "actionHint.credits": "{sign}{value} Credits",
   "action.work": "Work",
   "action.eat": "Eat",
   "action.guest": "Guest",

@@ -2020,9 +2020,24 @@ export class UiController {
     );
     const guestCost = Math.round(getGuestCost(stage) * this.state.buffs.guestCostMult);
 
-    this.refs.actionHintWork.textContent = `+${this.creditNumberFormatter.format(workExpectedGain)}`;
-    this.refs.actionHintEat.textContent = `-${this.creditNumberFormatter.format(eatExpectedCost)}`;
-    this.refs.actionHintGuest.textContent = `-${this.creditNumberFormatter.format(guestCost)}`;
+    this.refs.actionHintWork.textContent = t("actionHint.credits", {
+      sign: "+",
+      value: this.creditNumberFormatter.format(workExpectedGain),
+    });
+    this.refs.actionHintEat.textContent = t("actionHint.credits", {
+      sign: "-",
+      value: this.creditNumberFormatter.format(eatExpectedCost),
+    });
+    this.refs.actionHintGuest.textContent = t("actionHint.credits", {
+      sign: "-",
+      value: this.creditNumberFormatter.format(guestCost),
+    });
+
+    const canAct = this.state.actionsRemaining > 0;
+    const eatWillBankrupt = canAct && eatExpectedCost > this.state.money;
+    const guestWillBankrupt = canAct && guestCost > this.state.money;
+    this.refs.btnEat.classList.toggle("action-bankrupt-risk", eatWillBankrupt);
+    this.refs.btnGuest.classList.toggle("action-bankrupt-risk", guestWillBankrupt);
   }
 
   private updateStressDangerState(stress: number, stress100Days: number): void {

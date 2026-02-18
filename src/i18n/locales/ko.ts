@@ -88,6 +88,7 @@ const ko: Record<string, string> = {
   "game.action.work": "일하기",
   "game.action.eat": "밥먹기",
   "game.action.guest": "게스트",
+  "actionHint.credits": "{sign}{value}크레딧",
   "action.work": "업무하기",
   "action.eat": "밥먹기",
   "action.guest": "게스트",
