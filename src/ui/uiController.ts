@@ -113,7 +113,6 @@ interface UiRefs {
   buffCardsOverlay: HTMLElement;
   buffCardsTitle: HTMLElement;
   buffCardsList: HTMLElement;
-  btnBuffCardSkip: HTMLButtonElement;
   currentBuffsOverlay: HTMLElement;
   currentBuffsTitle: HTMLElement;
   currentBuffsSummary: HTMLElement;
@@ -204,17 +203,6 @@ function sanitizeNickname(raw: string): string {
   const filtered = trimmed.replace(/[^A-Za-z0-9\u3131-\u318E\uAC00-\uD7A3 ]+/g, "");
   const clipped = filtered.slice(0, 12).trim();
   return clipped.length > 0 ? clipped : DEFAULT_NICKNAME;
-}
-
-function formatRankLine(entry: RankEntry): { percent: string; rank: string; total: string } {
-  const percent = Number.isFinite(entry.percentileTop ?? NaN) ? Number(entry.percentileTop).toFixed(1) : "?";
-  const rank = Number.isFinite(entry.rank ?? NaN) ? formatNumber(Number(entry.rank)) : "?";
-  const total = Number.isFinite(entry.total ?? NaN) ? formatNumber(Number(entry.total)) : "?";
-  return {
-    percent,
-    rank,
-    total,
-  };
 }
 
 function createRunId(): string {
@@ -543,7 +531,6 @@ export class UiController {
           <div class="skin-panel ui-panel modal-card panel-transition-card buff-cards-panel">
             <h2 id="buff-cards-title" class="font-title card-modal-title">랜덤 버프 타임!</h2>
             <div id="buff-cards-list" class="buff-cards-list"></div>
-            <button id="btn-buff-card-skip" class="skin-button ui-btn ui-btn--secondary font-title">스킵</button>
           </div>
         </div>
 
@@ -640,7 +627,6 @@ export class UiController {
       buffCardsOverlay: pick("buff-cards-overlay"),
       buffCardsTitle: pick("buff-cards-title"),
       buffCardsList: pick("buff-cards-list"),
-      btnBuffCardSkip: pick("btn-buff-card-skip"),
       currentBuffsOverlay: pick("current-buffs-overlay"),
       currentBuffsTitle: pick("current-buffs-title"),
       currentBuffsSummary: pick("current-buffs-summary"),
@@ -804,7 +790,6 @@ export class UiController {
     this.renderGuestCheatSheet();
     this.refs.btnCurrentBuffs.textContent = "현재 버프";
     this.refs.buffCardsTitle.textContent = t("buff.cardTitle");
-    this.refs.btnBuffCardSkip.textContent = "스킵";
     this.refs.currentBuffsTitle.textContent = t("buff.currentTitle");
     this.refs.btnCloseCurrentBuffs.textContent = "닫기";
     this.renderCurrentBuffsOverlay();
@@ -1161,7 +1146,6 @@ export class UiController {
       this.refs.btnMiniSound,
       this.refs.btnMiniCheatSheet,
       this.refs.btnCurrentBuffs,
-      this.refs.btnBuffCardSkip,
       this.refs.btnCloseCurrentBuffs,
       this.refs.btnCloseCheatSheet,
       this.refs.btnConfirmYes,
@@ -1248,9 +1232,6 @@ export class UiController {
     this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
     this.refs.btnMiniCheatSheet.addEventListener("click", () => this.openCheatSheetModal(true));
     this.refs.btnCurrentBuffs.addEventListener("click", () => this.openCurrentBuffsOverlay(true));
-    this.refs.btnBuffCardSkip.addEventListener("click", () => {
-      void this.resolveBuffCardSelection(undefined);
-    });
     this.refs.btnCloseCurrentBuffs.addEventListener("click", () => this.openCurrentBuffsOverlay(false));
     this.refs.btnCloseCheatSheet.addEventListener("click", () => this.openCheatSheetModal(false));
     this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
@@ -1287,8 +1268,6 @@ export class UiController {
     });
     this.refs.buffCardsOverlay.addEventListener("pointerdown", (event) => {
       if (!this.cardSpinController.isSpinningNow()) return;
-      const target = event.target as HTMLElement;
-      if (target.closest("#btn-buff-card-skip")) return;
       event.preventDefault();
       this.cardSpinController.revealFinal();
     });
@@ -1437,7 +1416,6 @@ export class UiController {
     this.cardManager.reset();
     this.setInputLocked(false);
     this.setBuffCardOptionsEnabled(false);
-    this.setBuffCardSkipEnabled(false);
     this.refs.buffCardsOverlay.classList.remove("cards-spinning");
     clearPanelTransition(this.refs.buffCardsOverlay);
     this.refs.buffCardsOverlay.classList.add("hidden");
@@ -1459,7 +1437,6 @@ export class UiController {
         this.setInputLocked(true);
         this.renderBuffCardChoices(cards);
         this.setBuffCardOptionsEnabled(false);
-        this.setBuffCardSkipEnabled(true);
         await this.animateBuffCardOverlay(true);
         this.cardSpinController.startSpin(cards);
         break;
@@ -1506,7 +1483,6 @@ export class UiController {
     if (!cards) return;
     this.cardSpinController.stop();
     this.setBuffCardOptionsEnabled(false);
-    this.setBuffCardSkipEnabled(false);
     const selected = selectedCardId ? cards.find((card) => card.id === selectedCardId) : undefined;
     if (selectedCardId) {
       await this.playSelectedCardMotion(selectedCardId);
@@ -1564,10 +1540,6 @@ export class UiController {
     for (const slot of this.buffCardSlots) {
       slot.button.disabled = !enabled;
     }
-  }
-
-  private setBuffCardSkipEnabled(enabled: boolean): void {
-    this.refs.btnBuffCardSkip.disabled = !enabled;
   }
 
   private async animateBuffCardOverlay(open: boolean): Promise<void> {
@@ -2247,15 +2219,20 @@ export class UiController {
     this.refs.btnUploadShare.disabled = this.isUploading || !this.latestResult;
 
     if (this.uploadedMeta) {
-      const credit = formatRankLine(this.uploadedMeta.credit);
-      const thigh = formatRankLine(this.uploadedMeta.thigh);
-      this.refs.scoreRankCreditPopup.textContent = t("score.rank.credit", credit);
-      this.refs.scoreRankThighPopup.textContent = t("score.rank.thigh", thigh);
+      const nickname = this.settings.nickname.trim() || DEFAULT_NICKNAME;
+      const creditTop = Number.isFinite(this.uploadedMeta.credit.percentileTop ?? NaN)
+        ? Number(this.uploadedMeta.credit.percentileTop)
+        : 100;
+      const thighTop = Number.isFinite(this.uploadedMeta.thigh.percentileTop ?? NaN)
+        ? Number(this.uploadedMeta.thigh.percentileTop)
+        : 100;
+      const bestTop = Math.min(creditTop, thighTop);
+      const bestTopText = bestTop.toFixed(1);
+      this.refs.scoreRankCreditPopup.textContent = `${nickname}님은 상위 ${bestTopText}%입니다`;
+      this.refs.scoreRankThighPopup.textContent = "";
     } else {
-      const pendingCredit = t("score.rank.pending.credit");
-      const pendingThigh = t("score.rank.pending.thigh");
-      this.refs.scoreRankCreditPopup.textContent = pendingCredit;
-      this.refs.scoreRankThighPopup.textContent = pendingThigh;
+      this.refs.scoreRankCreditPopup.textContent = "";
+      this.refs.scoreRankThighPopup.textContent = "";
     }
 
     this.refs.scoreUploadStatus.textContent = messageKey ? t(messageKey) : "";
