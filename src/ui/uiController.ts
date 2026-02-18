@@ -231,6 +231,7 @@ const PANEL_TRANSITION_DURATION_MS = 520;
 const FLIP_MS = 120;
 const BOUNCE_MS = 180;
 const SELECTED_CARD_FX_MS = 280;
+const CARD_SELECT_ENABLE_DELAY_MS = 220;
 const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   work: "💼 ",
   eat: "🍚 ",
@@ -274,6 +275,7 @@ export class UiController {
   private processingBuffMilestones = false;
   private activeBuffCardChoices: BuffCardSelection[] | null = null;
   private buffCardSlots: BuffCardSlotView[] = [];
+  private buffCardEnableTimerId?: number;
   private readonly cardSpinController: CardSpinController<BuffCardSelection>;
   private spinAudioContext: AudioContext | null = null;
 
@@ -1396,6 +1398,10 @@ export class UiController {
   private resetBuffCardUiState(): void {
     this.activeBuffCardChoices = null;
     this.buffCardSlots = [];
+    if (this.buffCardEnableTimerId !== undefined) {
+      window.clearTimeout(this.buffCardEnableTimerId);
+      this.buffCardEnableTimerId = undefined;
+    }
     this.cardSpinController.stop();
     this.cardManager.reset();
     this.setInputLocked(false);
@@ -1558,7 +1564,14 @@ export class UiController {
         this.refs.buffCardsOverlay.classList.toggle("cards-spinning", spinning);
       },
       onAllStopped: () => {
-        this.setBuffCardOptionsEnabled(true);
+        if (this.buffCardEnableTimerId !== undefined) {
+          window.clearTimeout(this.buffCardEnableTimerId);
+        }
+        this.buffCardEnableTimerId = window.setTimeout(() => {
+          this.buffCardEnableTimerId = undefined;
+          if (!this.activeBuffCardChoices) return;
+          this.setBuffCardOptionsEnabled(true);
+        }, CARD_SELECT_ENABLE_DELAY_MS);
       },
       onTick: () => {
         this.playBuffSpinTickSound();

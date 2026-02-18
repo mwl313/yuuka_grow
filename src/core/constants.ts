@@ -23,12 +23,14 @@ export const WORK_STRESS_GAIN = 8;
 export const EAT_BASE_COST = 500;
 export const EAT_COST_PER_CM = 1.5;
 export const EAT_STRESS_REDUCE = 12;
-export const EAT_BASE_GAIN_CM = 4;
-export const EAT_GAIN_FACTOR = 0.006;
+export const EAT_MIN_GAIN_CM = 5;
+export const EAT_COST_TO_THIGH_CM = 0.0085;
 export const GUEST_COST_BASE = 800;
 export const GUEST_COST_KINK_STAGE = 20;
 export const GUEST_COST_SLOPE_PRE = 130;
 export const GUEST_COST_SLOPE_POST = 60;
+export const GUEST_COST_MULT_NUM = 2;
+export const GUEST_COST_MULT_DEN = 3;
 
 export const STRESS_END_CONSECUTIVE_DAYS = 10;
 export const NO_MEAL_MULTIPLIER = 0.95;

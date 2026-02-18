@@ -1,9 +1,9 @@
 import {
   ACTIONS_PER_DAY,
   EAT_BASE_COST,
-  EAT_BASE_GAIN_CM,
+  EAT_COST_TO_THIGH_CM,
   EAT_COST_PER_CM,
-  EAT_GAIN_FACTOR,
+  EAT_MIN_GAIN_CM,
   EAT_STRESS_REDUCE,
   MIN_THIGH_CM,
   NO_MEAL_MULTIPLIER,
@@ -115,12 +115,16 @@ export function applyWork(state: GameState): StepResult {
 }
 
 export function applyEat(state: GameState): StepResult {
-  const cost = Math.round((EAT_BASE_COST + state.thighCm * EAT_COST_PER_CM) * state.buffs.eatCostMult);
-  const thighGain = (EAT_BASE_GAIN_CM + state.thighCm * EAT_GAIN_FACTOR) * state.buffs.thighGainMult;
+  const finalCost = Math.round(
+    (EAT_BASE_COST + state.thighCm * EAT_COST_PER_CM) * state.buffs.eatCostMult,
+  );
+  // Option 3: thigh gain scales from the actual paid meal cost.
+  const baseThighGain = Math.max(EAT_MIN_GAIN_CM, Math.round(finalCost * EAT_COST_TO_THIGH_CM));
+  const thighGain = Math.round(baseThighGain * state.buffs.thighGainMult);
 
   let next: GameState = {
     ...state,
-    money: state.money - cost,
+    money: state.money - finalCost,
     stress: state.stress - EAT_STRESS_REDUCE,
     thighCm: state.thighCm + thighGain,
     ateToday: true,
@@ -128,8 +132,8 @@ export function applyEat(state: GameState): StepResult {
   };
 
   next = pushLog(next, "log.eat", {
-    credits: cost,
-    thigh: Math.round(thighGain),
+    credits: finalCost,
+    thigh: thighGain,
     stress: EAT_STRESS_REDUCE,
   }, "eat");
   next = addActionCount(next, "eat");
