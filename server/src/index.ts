@@ -716,7 +716,7 @@ async function handleSharePage(request: Request, env: AppEnv, origin: string | n
 	const endingTitle = getEndingTitle(row.ending_id, lang);
 	const bestTop = Math.min(credit.percentileTop, thigh.percentileTop);
 	const bestTopText = bestTop.toFixed(1);
-	const ogTitle = "유우카 키우기";
+	const ogTitle = `${row.nickname}의 점수는?`;
 	const ogDescription = `${row.nickname}님은 상위 ${bestTopText}%입니다`;
 	const ogImage = "https://yuukagrowdist.pages.dev/assets/yuuka/yuuka_head.png";
 	const escapedTitle = escapeHtml(ogTitle);
