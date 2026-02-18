@@ -2,6 +2,7 @@ import { buildShareUrl, fetchLeaderboard, submitRun } from "../api/leaderboardAp
 import type { LeaderboardItem, LeaderboardSort, RankEntry } from "../api/leaderboardApi";
 import { BgmManager } from "../audio/bgmManager";
 import { applyEat, applyGuest, applyWork } from "../core/actions";
+import { getGuestCheatEntries, type GuestOutcomeEffect } from "../core/guests";
 import {
   APP_VERSION,
   ASSET_KEYS_GIANT_BG,
@@ -12,6 +13,7 @@ import {
   GIANT_TRIGGER_STAGE_INTERVAL,
   GIANT_TRIGGER_STAGE_START,
   IP_LABEL,
+  NOA_WORK_CHARGES,
   VOLUME_STEP,
   WORK_BASE_MONEY,
   WORK_DAY_SLOPE,
@@ -88,6 +90,7 @@ interface UiRefs {
   btnEndingConditionClose: HTMLButtonElement;
   btnMiniLobby: HTMLButtonElement;
   btnMiniSound: HTMLButtonElement;
+  btnMiniCheatSheet: HTMLButtonElement;
   hudDay: HTMLElement;
   hudCredits: HTMLElement;
   hudStress: HTMLElement;
@@ -132,6 +135,11 @@ interface UiRefs {
   creditsBody: HTMLElement;
   guideTitle: HTMLElement;
   guideBody: HTMLElement;
+  cheatSheetModal: HTMLElement;
+  cheatSheetTitle: HTMLElement;
+  cheatSheetNote: HTMLElement;
+  cheatSheetList: HTMLElement;
+  btnCloseCheatSheet: HTMLButtonElement;
 }
 
 function wireButtonState(button: HTMLButtonElement): void {
@@ -191,6 +199,9 @@ const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   eat: "🍚 ",
   guest: "🎲 ",
   system: "⚠️ ",
+};
+const GUEST_SPRITE_KEY_BY_ID: Record<string, string> = {
+  teacher: "sensei",
 };
 
 export class UiController {
@@ -309,6 +320,7 @@ export class UiController {
                 <div class="log-header-controls">
                   <button id="btn-mini-lobby" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="Back">←</button>
                   <button id="btn-mini-sound" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="Sound">🔊</button>
+                  <button id="btn-mini-cheatsheet" class="mini-log-button ui-btn ui-btn--icon font-title" type="button" aria-label="게스트 치트시트">ℹ️</button>
                 </div>
               </div>
               <div class="log-body">
@@ -461,8 +473,17 @@ export class UiController {
         <div id="guide-modal" class="overlay hidden">
           <div class="skin-panel ui-panel modal-card panel-transition-card">
             <h2 id="guide-title" class="font-title"></h2>
-            <p id="guide-body" class="modal-temp-body"></p>
+            <div id="guide-body" class="modal-temp-body"></div>
             <button id="btn-close-guide" class="skin-button ui-btn ui-btn--secondary font-title"></button>
+          </div>
+        </div>
+
+        <div id="cheatsheet-modal" class="overlay hidden">
+          <div class="skin-panel ui-panel modal-card panel-transition-card cheatsheet-card">
+            <h2 id="cheatsheet-title" class="font-title"></h2>
+            <p id="cheatsheet-note" class="cheatsheet-note"></p>
+            <div id="cheatsheet-list" class="cheatsheet-list"></div>
+            <button id="btn-close-cheatsheet" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </div>
 
@@ -545,6 +566,7 @@ export class UiController {
       btnEndingConditionClose: pick("btn-ending-condition-close"),
       btnMiniLobby: pick("btn-mini-lobby"),
       btnMiniSound: pick("btn-mini-sound"),
+      btnMiniCheatSheet: pick("btn-mini-cheatsheet"),
       hudDay: pick("hud-day"),
       hudCredits: pick("hud-credits"),
       hudStress: pick("hud-stress"),
@@ -589,6 +611,11 @@ export class UiController {
       creditsBody: pick("credits-body"),
       guideTitle: pick("guide-title"),
       guideBody: pick("guide-body"),
+      cheatSheetModal: pick("cheatsheet-modal"),
+      cheatSheetTitle: pick("cheatsheet-title"),
+      cheatSheetNote: pick("cheatsheet-note"),
+      cheatSheetList: pick("cheatsheet-list"),
+      btnCloseCheatSheet: pick("btn-close-cheatsheet"),
     };
   }
 
@@ -634,7 +661,7 @@ export class UiController {
     this.setText("lobby-nickname", t("lobby.nicknameCurrent", { nickname: this.settings.nickname }));
 
     this.refs.btnStart.textContent = t("menu.start");
-    this.refs.btnSettings.textContent = "⚙";
+    this.refs.btnSettings.textContent = "⚙️";
     this.refs.btnSettings.setAttribute("aria-label", t("lobby.btnSettingsIconLabel"));
     this.refs.btnNickname.textContent = t("lobby.btnNickname");
     this.refs.btnLeaderboard.textContent = t("lobby.btnLeaderboard");
@@ -691,7 +718,12 @@ export class UiController {
     this.refs.creditsTitle.textContent = t("credits.title");
     this.refs.creditsBody.textContent = t("credits.body");
     this.refs.guideTitle.textContent = t("guide.title");
-    this.refs.guideBody.textContent = t("guide.body");
+    this.renderGuideBody();
+    this.refs.cheatSheetTitle.textContent = t("cheatsheet.title");
+    this.refs.cheatSheetNote.textContent = t("cheatsheet.note");
+    this.refs.btnCloseCheatSheet.textContent = t("cheatsheet.close");
+    this.refs.btnMiniCheatSheet.setAttribute("aria-label", t("cheatsheet.title"));
+    this.renderGuestCheatSheet();
 
     this.setText("score-title", t("result.title"));
     this.setText("score-label-ending", t("result.ending"));
@@ -734,6 +766,127 @@ export class UiController {
     this.refs.btnEndingBook.textContent = t("lobby.btnEndingBook");
   }
 
+  private renderGuideBody(): void {
+    const body = t("guide.body");
+    const sections = body
+      .split(/\r?\n\s*\r?\n/g)
+      .map((section) => section.trim())
+      .filter((section) => section.length > 0);
+
+    const headingSet = new Set(["행동", "주의", "Actions", "Caution", "行動", "注意"]);
+    this.refs.guideBody.innerHTML = "";
+
+    for (const section of sections) {
+      const block = document.createElement("p");
+      block.className = "guide-block";
+      if (headingSet.has(section)) {
+        block.classList.add("guide-block--heading");
+      }
+      block.textContent = section;
+      this.refs.guideBody.append(block);
+    }
+  }
+
+  private renderGuestCheatSheet(): void {
+    const entries = getGuestCheatEntries();
+    this.refs.cheatSheetList.innerHTML = "";
+
+    for (const entry of entries) {
+      const card = document.createElement("article");
+      card.className = "cheatsheet-item";
+
+      const avatarWrap = document.createElement("div");
+      avatarWrap.className = "cheatsheet-avatar";
+      const fallback = document.createElement("span");
+      fallback.className = "cheatsheet-avatar-fallback";
+      fallback.textContent = "?";
+      const avatar = document.createElement("img");
+      avatar.className = "cheatsheet-avatar-image";
+      avatar.alt = t(`guest.${entry.guestId}.name`);
+      const spriteKey = GUEST_SPRITE_KEY_BY_ID[entry.guestId] ?? entry.guestId;
+      avatar.src = `/assets/guests/${spriteKey}/${spriteKey}.png`;
+      avatar.addEventListener("load", () => {
+        fallback.style.display = "none";
+      });
+      avatar.addEventListener("error", () => {
+        avatar.style.display = "none";
+        fallback.style.display = "inline-flex";
+      });
+      avatarWrap.append(fallback, avatar);
+
+      const content = document.createElement("div");
+      content.className = "cheatsheet-content";
+      const name = document.createElement("h3");
+      name.className = "cheatsheet-name";
+      name.textContent = t(`guest.${entry.guestId}.name`);
+      content.append(name);
+
+      const lines = this.buildGuestCheatLines(entry.outcomes);
+      for (const lineText of lines) {
+        const line = document.createElement("p");
+        line.className = "cheatsheet-line";
+        line.textContent = lineText;
+        content.append(line);
+      }
+
+      card.append(avatarWrap, content);
+      this.refs.cheatSheetList.append(card);
+    }
+  }
+
+  private buildGuestCheatLines(outcomes: readonly GuestOutcomeEffect[]): string[] {
+    if (outcomes.length <= 1) {
+      return [this.formatGuestCheatEffect(outcomes[0])];
+    }
+    return outcomes.map((effect) => {
+      const label = this.resolveGuestOutcomeLabel(effect.outcomeId);
+      return `${label}: ${this.formatGuestCheatEffect(effect)}`;
+    });
+  }
+
+  private resolveGuestOutcomeLabel(outcomeId: string): string {
+    if (outcomeId === "success" || outcomeId === "jackpot") return t("cheatsheet.outcome.success");
+    if (outcomeId === "loss" || outcomeId === "slip") return t("cheatsheet.outcome.fail");
+    return t("cheatsheet.outcome.default");
+  }
+
+  private formatGuestCheatEffect(effect: GuestOutcomeEffect): string {
+    const parts: string[] = [];
+    if (effect.thighPct !== 0) {
+      parts.push(
+        `${t("cheatsheet.stat.thigh")} ${this.formatSignedPercent(effect.thighPct)}`,
+      );
+    }
+    if (effect.moneyPct !== 0) {
+      parts.push(
+        `${t("cheatsheet.stat.credit")} ${this.formatSignedPercent(effect.moneyPct)}`,
+      );
+    }
+    if (effect.stressDelta !== 0) {
+      parts.push(
+        `${t("cheatsheet.stat.stress")} ${this.formatSignedInteger(effect.stressDelta)}`,
+      );
+    }
+    if (effect.refreshNoaCharges) {
+      parts.push(t("cheatsheet.workBuff", { count: String(NOA_WORK_CHARGES) }));
+    }
+    if (parts.length === 0) {
+      return t("cheatsheet.noEffect");
+    }
+    return parts.join(" / ");
+  }
+
+  private formatSignedPercent(value: number): string {
+    const percent = Math.round(value * 100);
+    return `${percent >= 0 ? "+" : ""}${percent}%`;
+  }
+
+  private formatSignedInteger(value: number): string {
+    const rounded = Math.round(value);
+    const formatted = this.creditNumberFormatter.format(Math.abs(rounded));
+    return `${rounded >= 0 ? "+" : "-"}${formatted}`;
+  }
+
   private bindEvents(): void {
     this.root.addEventListener(
       "pointerdown",
@@ -773,6 +926,8 @@ export class UiController {
       this.refs.btnEndingBookBack,
       this.refs.btnMiniLobby,
       this.refs.btnMiniSound,
+      this.refs.btnMiniCheatSheet,
+      this.refs.btnCloseCheatSheet,
       this.refs.btnConfirmYes,
       this.refs.btnConfirmNo,
     ].forEach(wireButtonState);
@@ -850,6 +1005,8 @@ export class UiController {
     });
     this.refs.btnMiniLobby.addEventListener("click", () => this.openAbandonConfirm(true));
     this.refs.btnMiniSound.addEventListener("click", () => this.toggleMasterMute());
+    this.refs.btnMiniCheatSheet.addEventListener("click", () => this.openCheatSheetModal(true));
+    this.refs.btnCloseCheatSheet.addEventListener("click", () => this.openCheatSheetModal(false));
     this.refs.btnConfirmYes.addEventListener("click", () => this.confirmAbandon());
     this.refs.btnConfirmNo.addEventListener("click", () => this.openAbandonConfirm(false));
 
@@ -870,6 +1027,11 @@ export class UiController {
     this.refs.guideModal.addEventListener("click", (event) => {
       if (event.target === this.refs.guideModal) {
         this.openGuideModal(false);
+      }
+    });
+    this.refs.cheatSheetModal.addEventListener("click", (event) => {
+      if (event.target === this.refs.cheatSheetModal) {
+        this.openCheatSheetModal(false);
       }
     });
   }
@@ -966,6 +1128,13 @@ export class UiController {
       hapticLobbyTap();
     }
     this.setOverlayOpen(this.refs.guideModal, open);
+  }
+
+  private openCheatSheetModal(open: boolean): void {
+    if (open) {
+      this.renderGuestCheatSheet();
+    }
+    this.setOverlayOpen(this.refs.cheatSheetModal, open);
   }
 
   private applyNickname(): void {
