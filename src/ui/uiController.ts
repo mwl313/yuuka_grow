@@ -5,7 +5,6 @@ import { applyEat, applyGuest, applyWork } from "../core/actions";
 import {
   applyCardToMultipliers,
   BUFF_CARD_STAGE_MILESTONES,
-  formatBuffEffectLine,
   generateBuffCards,
 } from "../core/buffSystem";
 import { getGuestCheatEntries, type GuestOutcomeEffect } from "../core/guests";
@@ -115,7 +114,6 @@ interface UiRefs {
   currentBuffsOverlay: HTMLElement;
   currentBuffsTitle: HTMLElement;
   currentBuffsSummary: HTMLElement;
-  currentBuffsHistory: HTMLElement;
   btnCloseCurrentBuffs: HTMLButtonElement;
   hudDay: HTMLElement;
   hudCredits: HTMLElement;
@@ -220,7 +218,7 @@ function createRunId(): string {
 const TURN_SLOT_KEYS = ["morning", "noon", "evening"] as const;
 const ACTION_INPUT_COOLDOWN_MS = 300;
 const ENDING_TRANSITION_DELAY_MS = 700;
-const CARD_OVERLAY_ANIM_MS = 200;
+const PANEL_TRANSITION_DURATION_MS = 520;
 const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   work: "💼 ",
   eat: "🍚 ",
@@ -521,7 +519,7 @@ export class UiController {
 
         <div id="buff-cards-overlay" class="overlay hidden buff-cards-overlay">
           <div class="skin-panel ui-panel modal-card panel-transition-card buff-cards-panel">
-            <h2 id="buff-cards-title" class="font-title">선택지</h2>
+            <h2 id="buff-cards-title" class="font-title card-modal-title">랜덤 버프 타임!</h2>
             <div id="buff-cards-list" class="buff-cards-list"></div>
             <button id="btn-buff-card-skip" class="skin-button ui-btn ui-btn--secondary font-title">스킵</button>
           </div>
@@ -531,7 +529,6 @@ export class UiController {
           <div class="skin-panel ui-panel modal-card panel-transition-card current-buffs-card">
             <h2 id="current-buffs-title" class="font-title">현재 버프</h2>
             <div id="current-buffs-summary" class="current-buffs-summary"></div>
-            <div id="current-buffs-history" class="current-buffs-history"></div>
             <button id="btn-close-current-buffs" class="skin-button ui-btn ui-btn--secondary font-title">닫기</button>
           </div>
         </div>
@@ -624,7 +621,6 @@ export class UiController {
       currentBuffsOverlay: pick("current-buffs-overlay"),
       currentBuffsTitle: pick("current-buffs-title"),
       currentBuffsSummary: pick("current-buffs-summary"),
-      currentBuffsHistory: pick("current-buffs-history"),
       btnCloseCurrentBuffs: pick("btn-close-current-buffs"),
       hudDay: pick("hud-day"),
       hudCredits: pick("hud-credits"),
@@ -784,9 +780,9 @@ export class UiController {
     this.refs.btnMiniCheatSheet.setAttribute("aria-label", t("cheatsheet.title"));
     this.renderGuestCheatSheet();
     this.refs.btnCurrentBuffs.textContent = "현재 버프";
-    this.refs.buffCardsTitle.textContent = "선택지";
+    this.refs.buffCardsTitle.textContent = t("buff.cardTitle");
     this.refs.btnBuffCardSkip.textContent = "스킵";
-    this.refs.currentBuffsTitle.textContent = "현재 버프";
+    this.refs.currentBuffsTitle.textContent = t("buff.currentTitle");
     this.refs.btnCloseCurrentBuffs.textContent = "닫기";
     this.renderCurrentBuffsOverlay();
 
@@ -1378,7 +1374,8 @@ export class UiController {
     this.activeBuffCardChoices = null;
     this.cardManager.reset();
     this.setInputLocked(false);
-    this.refs.buffCardsOverlay.classList.remove("is-open");
+    this.setBuffCardControlsEnabled(false);
+    clearPanelTransition(this.refs.buffCardsOverlay);
     this.refs.buffCardsOverlay.classList.add("hidden");
   }
 
@@ -1397,7 +1394,9 @@ export class UiController {
         this.cardManager.setCardOverlayActive(true);
         this.setInputLocked(true);
         this.renderBuffCardChoices(cards);
+        this.setBuffCardControlsEnabled(false);
         await this.animateBuffCardOverlay(true);
+        this.setBuffCardControlsEnabled(true);
         break;
       }
     } finally {
@@ -1421,11 +1420,11 @@ export class UiController {
 
       const buffLine = document.createElement("p");
       buffLine.className = "buff-card-line buff-card-line--buff";
-      buffLine.textContent = formatBuffEffectLine(card.buff);
+      buffLine.textContent = this.formatEffectLine(card.buff.key, card.buff.delta);
 
       const debuffLine = document.createElement("p");
       debuffLine.className = "buff-card-line buff-card-line--debuff";
-      debuffLine.textContent = formatBuffEffectLine(card.debuff);
+      debuffLine.textContent = this.formatEffectLine(card.debuff.key, card.debuff.delta);
 
       button.append(rarity, buffLine, debuffLine);
       this.refs.buffCardsList.append(button);
@@ -1435,6 +1434,7 @@ export class UiController {
   private async resolveBuffCardSelection(selectedCardId?: string): Promise<void> {
     const cards = this.activeBuffCardChoices;
     if (!cards) return;
+    this.setBuffCardControlsEnabled(false);
     const selected = selectedCardId ? cards.find((card) => card.id === selectedCardId) : undefined;
 
     await this.animateBuffCardOverlay(false);
@@ -1455,8 +1455,8 @@ export class UiController {
 
     if (selected) {
       this.state = pushLog(this.state, "log.buffCard.pick", {
-        buff: formatBuffEffectLine(selected.buff),
-        debuff: formatBuffEffectLine(selected.debuff),
+        buff: this.formatEffectLine(selected.buff.key, selected.buff.delta),
+        debuff: this.formatEffectLine(selected.debuff.key, selected.debuff.delta),
         rarity: selected.rarityLabel,
       }, "system");
     } else {
@@ -1474,31 +1474,36 @@ export class UiController {
     void this.tryShowNextBuffCard();
   }
 
+  private setBuffCardControlsEnabled(enabled: boolean): void {
+    this.refs.btnBuffCardSkip.disabled = !enabled;
+    const optionButtons = this.refs.buffCardsList.querySelectorAll<HTMLButtonElement>(".buff-card-option");
+    optionButtons.forEach((button) => {
+      button.disabled = !enabled;
+    });
+  }
+
   private async animateBuffCardOverlay(open: boolean): Promise<void> {
     const overlay = this.refs.buffCardsOverlay;
     if (open) {
-      overlay.classList.remove("hidden");
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      overlay.classList.add("is-open");
-      await new Promise<void>((resolve) => window.setTimeout(resolve, CARD_OVERLAY_ANIM_MS));
+      showPanelWithTransition(overlay);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, PANEL_TRANSITION_DURATION_MS));
       return;
     }
-    overlay.classList.remove("is-open");
-    await new Promise<void>((resolve) => window.setTimeout(resolve, CARD_OVERLAY_ANIM_MS));
-    overlay.classList.add("hidden");
+    hidePanelWithTransition(overlay);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, PANEL_TRANSITION_DURATION_MS));
   }
 
   private renderCurrentBuffsOverlay(): void {
-    const format = (value: number): string => `x${value.toFixed(2)}`;
+    const formatMult = (value: number): string => `x${value.toFixed(2)}`;
     const summaryLines = [
-      `credit ${format(this.state.buffs.creditGainMult)}`,
-      `thigh ${format(this.state.buffs.thighGainMult)}`,
-      `stress ${format(this.state.buffs.stressGainMult)}`,
-      `makiProb ${format(this.state.buffs.makiWinProbMult)}`,
-      `koyukiProb ${format(this.state.buffs.koyukiWinProbMult)}`,
-      `guestCost ${format(this.state.buffs.guestCostMult)}`,
-      `eatCost ${format(this.state.buffs.eatCostMult)}`,
-      `noEatPenalty ${format(this.state.buffs.noEatPenaltyMult)}`,
+      `${t("buff.creditGain")} ${formatMult(this.state.buffs.creditGainMult)}`,
+      `${t("buff.thighGain")} ${formatMult(this.state.buffs.thighGainMult)}`,
+      `${t("buff.stressGain")} ${formatMult(this.state.buffs.stressGainMult)}`,
+      `${t("buff.makiProb")} ${formatMult(this.state.buffs.makiWinProbMult)}`,
+      `${t("buff.koyukiProb")} ${formatMult(this.state.buffs.koyukiWinProbMult)}`,
+      `${t("buff.guestCost")} ${formatMult(this.state.buffs.guestCostMult)}`,
+      `${t("buff.eatCost")} ${formatMult(this.state.buffs.eatCostMult)}`,
+      `${t("buff.noEatPenalty")} ${formatMult(this.state.buffs.noEatPenaltyMult)}`,
     ];
     this.refs.currentBuffsSummary.innerHTML = "";
     for (const line of summaryLines) {
@@ -1507,30 +1512,42 @@ export class UiController {
       row.textContent = line;
       this.refs.currentBuffsSummary.append(row);
     }
+  }
 
-    this.refs.currentBuffsHistory.innerHTML = "";
-    if (this.state.buffHistory.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "current-buffs-empty";
-      empty.textContent = "아직 선택한 카드가 없습니다.";
-      this.refs.currentBuffsHistory.append(empty);
-      return;
+  private getBuffLabelKey(effectType: string): string {
+    switch (effectType) {
+      case "creditGainMult":
+        return "buff.creditGain";
+      case "thighGainMult":
+        return "buff.thighGain";
+      case "stressGainMult":
+        return "buff.stressGain";
+      case "koyukiWinProbMult":
+        return "buff.koyukiProb";
+      case "makiWinProbMult":
+        return "buff.makiProb";
+      case "guestCostMult":
+        return "buff.guestCost";
+      case "eatCostMult":
+        return "buff.eatCost";
+      case "noEatPenaltyMult":
+        return "buff.noEatPenalty";
+      default:
+        return effectType;
     }
-    for (const card of this.state.buffHistory) {
-      const row = document.createElement("div");
-      row.className = "current-buffs-card-row";
-      const rarity = document.createElement("div");
-      rarity.className = `buff-card-rarity buff-card-rarity--${card.rarityLabel.toLowerCase()}`;
-      rarity.textContent = `${card.rarityLabel} (Stage ${card.milestone})`;
-      const buff = document.createElement("p");
-      buff.className = "buff-card-line buff-card-line--buff";
-      buff.textContent = formatBuffEffectLine(card.buff);
-      const debuff = document.createElement("p");
-      debuff.className = "buff-card-line buff-card-line--debuff";
-      debuff.textContent = formatBuffEffectLine(card.debuff);
-      row.append(rarity, buff, debuff);
-      this.refs.currentBuffsHistory.append(row);
+  }
+
+  private formatEffectLine(effectType: string, delta: number): string {
+    const labelKey = this.getBuffLabelKey(effectType);
+    const label = labelKey.startsWith("buff.") ? t(labelKey) : labelKey;
+    const percent = `${Math.round(Math.abs(delta) * 100)}%`;
+    const dirKey = delta >= 0 ? "common.increase" : "common.decrease";
+    const direction = t(dirKey);
+    const lang = getLanguage();
+    if (lang === "en") {
+      return `${label} ${direction} ${percent}`;
     }
+    return `${label} ${percent} ${direction}`;
   }
 
   private applyNickname(): void {

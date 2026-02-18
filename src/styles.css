@@ -882,16 +882,6 @@ textarea {
   padding: 16px;
   display: grid;
   gap: 12px;
-  opacity: 0;
-  transform: translateY(18px);
-  transition:
-    transform 200ms ease,
-    opacity 200ms ease;
-}
-
-.buff-cards-overlay.is-open .buff-cards-panel {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .buff-cards-list {
@@ -959,25 +949,58 @@ textarea {
   color: #c93a3a;
 }
 
+.card-modal-title {
+  margin: 0;
+  font-weight: 800;
+  color: var(--accent);
+  background: linear-gradient(
+    90deg,
+    #ff4d4d,
+    #ffa94d,
+    #ffe44d,
+    #4dff88,
+    #4dd7ff,
+    #7a5cff,
+    #ff4dd2
+  );
+  background-size: 300% 100%;
+  animation: rainbow-shift 2.2s linear infinite;
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .card-modal-title {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes rainbow-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
 .current-buffs-card {
   width: min(560px, 96vw);
-  max-height: min(72vh, 620px);
+  max-height: min(65vh, 520px);
   padding: 16px;
   display: grid;
   gap: 10px;
 }
 
-.current-buffs-summary,
-.current-buffs-history {
+.current-buffs-summary {
   border: 1px solid rgba(15, 22, 36, 0.12);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.7);
   padding: 10px;
-}
-
-.current-buffs-summary {
   display: grid;
   gap: 4px;
+  overflow-y: auto;
+  max-height: min(44vh, 320px);
 }
 
 .current-buffs-summary-line {
@@ -985,31 +1008,6 @@ textarea {
   font-size: 13px;
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
-}
-
-.current-buffs-history {
-  display: grid;
-  gap: 8px;
-  overflow-y: auto;
-  max-height: min(38vh, 280px);
-}
-
-.current-buffs-empty {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-1);
-}
-
-.current-buffs-card-row {
-  display: grid;
-  gap: 4px;
-  padding-bottom: 8px;
-  border-bottom: 1px dashed rgba(15, 22, 36, 0.18);
-}
-
-.current-buffs-card-row:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
 }
 
 .overlay.overlay--enter-rise .panel-transition-card {
