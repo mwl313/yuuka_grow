@@ -1,5 +1,5 @@
 import { DAYS_TO_SURVIVE, STRESS_END_CONSECUTIVE_DAYS } from "./constants";
-import { hasSpecialMarriageCondition } from "./endingsTable";
+import { selectInstantSpecialEndingId } from "./endingsTable";
 import type { EndBaseCategory, EndingCategory, GameState, RunResult } from "./types";
 
 export function createRunResult(
@@ -40,9 +40,13 @@ export function checkDayEndEnding(state: GameState): RunResult | undefined {
   return undefined;
 }
 
-export function checkInstantSpecialEnding(state: GameState): RunResult | undefined {
-  if (!hasSpecialMarriageCondition(state)) return undefined;
-  return createRunResult(state, "special", "special.marriage");
+export function checkInstantSpecialEnding(
+  state: GameState,
+  isCollected: (endingId: string) => boolean = () => false,
+): RunResult | undefined {
+  const endingId = selectInstantSpecialEndingId(state, isCollected);
+  if (!endingId) return undefined;
+  return createRunResult(state, "special", endingId);
 }
 
 export function toBaseEndCategory(value: string): EndBaseCategory {

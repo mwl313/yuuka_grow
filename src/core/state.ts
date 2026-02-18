@@ -9,7 +9,14 @@ import {
 } from "./constants";
 import { createInitialBuffMultipliers } from "./buffSystem";
 import { clamp } from "./clamp";
-import type { ActionCounts, BuffCardSelection, BuffMultipliers, GameState, GuestCounts } from "./types";
+import type {
+  ActionCounts,
+  ActionKindId,
+  BuffCardSelection,
+  BuffMultipliers,
+  GameState,
+  GuestCounts,
+} from "./types";
 
 function createInitialActionCounts(): ActionCounts {
   return {
@@ -46,6 +53,7 @@ export function createInitialState(): GameState {
     guestCounts: createInitialGuestCounts(),
     koyukiLossCount: 0,
     eatSlotsMask: 0,
+    day1Actions: [],
     milestonesHit: [],
     buffs: createInitialBuffMultipliers(),
     buffHistory: [],
@@ -145,6 +153,11 @@ export function sanitizeState(input: unknown): GameState {
     typeof source.eatSlotsMask === "number" && source.eatSlotsMask >= 0
       ? Math.floor(source.eatSlotsMask)
       : fallback.eatSlotsMask;
+  const day1Actions = Array.isArray(source.day1Actions)
+    ? source.day1Actions
+        .filter((action): action is ActionKindId => action === "work" || action === "eat" || action === "guest")
+        .slice(0, 3)
+    : fallback.day1Actions;
   const logs = Array.isArray(source.logs)
     ? source.logs.filter((line): line is string => typeof line === "string")
     : fallback.logs;
@@ -224,6 +237,7 @@ export function sanitizeState(input: unknown): GameState {
     guestCounts,
     koyukiLossCount,
     eatSlotsMask,
+    day1Actions,
     milestonesHit,
     buffs,
     buffHistory,

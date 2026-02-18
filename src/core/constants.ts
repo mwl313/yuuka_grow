@@ -1,4 +1,4 @@
-export const APP_VERSION = "v1.3";
+export const APP_VERSION = "1.0";
 export const AUTHOR_NAME = "PangyoStonefist";
 export const IP_LABEL = "Blue Archive";
 
@@ -29,8 +29,8 @@ export const GUEST_COST_BASE = 800;
 export const GUEST_COST_KINK_STAGE = 20;
 export const GUEST_COST_SLOPE_PRE = 130;
 export const GUEST_COST_SLOPE_POST = 60;
-export const GUEST_COST_MULT_NUM = 2;
-export const GUEST_COST_MULT_DEN = 3;
+export const GUEST_COST_MULT_NUM = 1;
+export const GUEST_COST_MULT_DEN = 2;
 
 export const STRESS_END_CONSECUTIVE_DAYS = 10;
 export const NO_MEAL_MULTIPLIER = 0.95;

@@ -31,6 +31,7 @@ export interface SelectedEnding {
 export const EAT_SLOT_MORNING_MASK = 1;
 export const EAT_SLOT_NOON_MASK = 2;
 export const EAT_SLOT_EVENING_MASK = 4;
+const ONE_TIME_ENDING_IDS = new Set<string>(["special.marriage", "any.noa_marriage"]);
 
 function makeEndingContext(endedAt: Date, stage: number): EndingContext {
   const hh = String(endedAt.getHours()).padStart(2, "0");
@@ -63,6 +64,19 @@ function isEatOnlyInSlot(state: GameState, slotMask: number): boolean {
   return state.actionCounts.eat >= 1 && state.eatSlotsMask === slotMask;
 }
 
+function isFoodieSequence(state: GameState): boolean {
+  return (
+    state.day1Actions.length >= 3 &&
+    state.day1Actions[0] === "eat" &&
+    state.day1Actions[1] === "eat" &&
+    state.day1Actions[2] === "eat"
+  );
+}
+
+function includesMeme1557(value: number): boolean {
+  return String(Math.max(0, Math.round(value))).includes("1557");
+}
+
 export const ENDING_DEFS: EndingDef[] = [
   {
     id: "special.shadow_time",
@@ -82,7 +96,7 @@ export const ENDING_DEFS: EndingDef[] = [
     descKey: "ending.special.marriage.desc",
     priorityFirst: 110,
     priorityRepeat: 110,
-    condition: (state) => state.guestCounts.sensei >= 100,
+    condition: (state) => state.guestCounts.sensei >= 30,
   },
   {
     id: "any.lucky_seven",
@@ -155,6 +169,36 @@ export const ENDING_DEFS: EndingDef[] = [
     condition: (state) => isEatOnlyInSlot(state, EAT_SLOT_EVENING_MASK),
   },
   {
+    id: "any.noa_marriage",
+    category: "special",
+    trigger: "instant",
+    titleKey: "ending.any.noa_marriage.title",
+    descKey: "ending.any.noa_marriage.desc",
+    priorityFirst: 109,
+    priorityRepeat: 1,
+    condition: (state) => state.guestCounts.noa >= 30,
+  },
+  {
+    id: "any.foodie",
+    category: "any",
+    trigger: "on_end",
+    titleKey: "ending.any.foodie.title",
+    descKey: "ending.any.foodie.desc",
+    priorityFirst: 88,
+    priorityRepeat: 12,
+    condition: (state) => isFoodieSequence(state),
+  },
+  {
+    id: "any.num_1557",
+    category: "any",
+    trigger: "on_end",
+    titleKey: "ending.any.num_1557.title",
+    descKey: "ending.any.num_1557.desc",
+    priorityFirst: 90,
+    priorityRepeat: 10,
+    condition: (state) => includesMeme1557(state.thighCm) || includesMeme1557(state.money),
+  },
+  {
     id: "normal.planet_scale",
     category: "normal",
     trigger: "on_end",
@@ -192,17 +236,17 @@ export const ENDING_DEFS: EndingDef[] = [
     descKey: "ending.normal.malang.desc",
     priorityFirst: 58,
     priorityRepeat: 58,
-    condition: (state) => state.day >= 100 && state.guestCounts.momoi + state.guestCounts.aris >= 100,
+    condition: (state) => state.day >= 100 && state.guestCounts.momoi + state.guestCounts.aris >= 60,
   },
   {
     id: "normal.worklife_balance",
-    category: "normal",
+    category: "any",
     trigger: "on_end",
     titleKey: "ending.normal.worklife_balance.title",
     descKey: "ending.normal.worklife_balance.desc",
     priorityFirst: 50,
     priorityRepeat: 50,
-    condition: (state) => state.day >= 100 && isBalancedActions(state),
+    condition: (state) => isBalancedActions(state),
   },
   {
     id: "normal.social_king",
@@ -212,7 +256,7 @@ export const ENDING_DEFS: EndingDef[] = [
     descKey: "ending.normal.social_king.desc",
     priorityFirst: 45,
     priorityRepeat: 45,
-    condition: (state) => state.day >= 100 && state.actionCounts.guest >= 220,
+    condition: (state) => state.day >= 100 && state.actionCounts.guest >= 180,
   },
   {
     id: "normal.workaholic",
@@ -222,7 +266,7 @@ export const ENDING_DEFS: EndingDef[] = [
     descKey: "ending.normal.workaholic.desc",
     priorityFirst: 45,
     priorityRepeat: 45,
-    condition: (state) => state.day >= 100 && state.actionCounts.work >= 200,
+    condition: (state) => state.day >= 100 && state.actionCounts.work >= 100,
   },
   {
     id: "normal.overnutrition",
@@ -232,7 +276,7 @@ export const ENDING_DEFS: EndingDef[] = [
     descKey: "ending.normal.overnutrition.desc",
     priorityFirst: 40,
     priorityRepeat: 40,
-    condition: (state) => state.day >= 100 && state.actionCounts.eat >= 180,
+    condition: (state) => state.day >= 100 && state.actionCounts.eat >= 100,
   },
   {
     id: "normal.malnutrition",
@@ -272,7 +316,7 @@ export const ENDING_DEFS: EndingDef[] = [
     descKey: "ending.bankrupt.koyuki_reflect.desc",
     priorityFirst: 60,
     priorityRepeat: 60,
-    condition: (state) => state.money <= 0 && state.koyukiLossCount >= 5,
+    condition: (state) => state.money <= 0 && state.koyukiLossCount >= 10,
   },
   {
     id: "bankrupt.financial_crisis",
@@ -361,6 +405,7 @@ export function selectEnding(
   const candidates: SelectedEnding[] = [];
   for (const def of ENDING_DEFS) {
     if (!isCandidateForBase(def, baseEndCategory)) continue;
+    if (ONE_TIME_ENDING_IDS.has(def.id) && isCollected(def.id)) continue;
     if (!def.condition(state, ctx)) continue;
     const effectivePriority = isCollected(def.id) ? def.priorityRepeat : def.priorityFirst;
     candidates.push({
@@ -399,9 +444,25 @@ export function selectEnding(
   };
 }
 
-export function hasSpecialMarriageCondition(state: GameState): boolean {
+export function selectInstantSpecialEndingId(
+  state: GameState,
+  isCollected: (endingId: string) => boolean = () => false,
+): string | undefined {
   const now = new Date();
   const ctx = makeEndingContext(now, getStage(state.thighCm));
-  const marriage = ENDING_DEFS.find((item) => item.id === "special.marriage");
-  return marriage ? marriage.condition(state, ctx) : false;
+  let selected: EndingDef | undefined;
+  let selectedPriority = -Infinity;
+
+  for (const def of ENDING_DEFS) {
+    if (def.category !== "special" || def.trigger !== "instant") continue;
+    if (ONE_TIME_ENDING_IDS.has(def.id) && isCollected(def.id)) continue;
+    if (!def.condition(state, ctx)) continue;
+    const effectivePriority = isCollected(def.id) ? def.priorityRepeat : def.priorityFirst;
+    if (!selected || effectivePriority > selectedPriority) {
+      selected = def;
+      selectedPriority = effectivePriority;
+    }
+  }
+
+  return selected?.id;
 }

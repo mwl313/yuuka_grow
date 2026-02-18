@@ -13,6 +13,7 @@ export type GuestOutcomeId = "default" | "success" | "slip" | "jackpot" | "loss"
 export type StressBandId = 0 | 1 | 2 | 3 | 4;
 export type LanguageCode = "ko" | "en" | "ja";
 export type ActionSlotId = "morning" | "noon" | "evening";
+export type ActionKindId = "work" | "eat" | "guest";
 export type LogKind = "work" | "eat" | "guest" | "system";
 export type BuffKey =
   | "stressGainMult"
@@ -82,6 +83,7 @@ export interface GameState {
   guestCounts: GuestCounts;
   koyukiLossCount: number;
   eatSlotsMask: number;
+  day1Actions: ActionKindId[];
   milestonesHit: number[];
   buffs: BuffMultipliers;
   buffHistory: BuffCardSelection[];

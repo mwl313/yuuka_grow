@@ -58,6 +58,14 @@ function addActionCount(state: GameState, key: "work" | "eat" | "guest"): GameSt
   };
 }
 
+function recordDay1Action(state: GameState, key: "work" | "eat" | "guest"): GameState {
+  if (state.day !== 1 || state.day1Actions.length >= 3) return state;
+  return {
+    ...state,
+    day1Actions: [...state.day1Actions, key],
+  };
+}
+
 function finalizeAction(state: GameState): StepResult {
   let next = normalizeAfterAction(state);
   next = consumeAction(next);
@@ -110,6 +118,7 @@ export function applyWork(state: GameState): StepResult {
     "work",
   );
   next = addActionCount(next, "work");
+  next = recordDay1Action(next, "work");
 
   return finalizeAction(next);
 }
@@ -137,11 +146,16 @@ export function applyEat(state: GameState): StepResult {
     stress: EAT_STRESS_REDUCE,
   }, "eat");
   next = addActionCount(next, "eat");
+  next = recordDay1Action(next, "eat");
 
   return finalizeAction(next);
 }
 
-export function applyGuest(state: GameState, rng: Rng): StepResult {
+export function applyGuest(
+  state: GameState,
+  rng: Rng,
+  isEndingCollected: (endingId: string) => boolean = () => false,
+): StepResult {
   const stage = getStage(state.thighCm);
   const guestCost = Math.round(getGuestCost(stage) * state.buffs.guestCostMult);
   const paidState: GameState = {
@@ -170,9 +184,10 @@ export function applyGuest(state: GameState, rng: Rng): StepResult {
     effectKey: guestResult.effectKey,
   }, "guest");
   next = addActionCount(next, "guest");
+  next = recordDay1Action(next, "guest");
 
   const consumed = consumeAction(normalizeAfterAction(next));
-  const instantSpecial = checkInstantSpecialEnding(consumed);
+  const instantSpecial = checkInstantSpecialEnding(consumed, isEndingCollected);
   if (instantSpecial) {
     return {
       state: consumed,
@@ -189,11 +204,12 @@ export function endDay(state: GameState): { state: GameState; ended?: RunResult 
 
   if (!next.ateToday) {
     const noEatFactor = getNoEatEffectiveFactor(next.buffs.noEatPenaltyMult, NO_MEAL_MULTIPLIER);
+    const noMealPenaltyPercent = Number(((1 - noEatFactor) * 100).toFixed(1));
     next = {
       ...next,
       thighCm: next.thighCm * noEatFactor,
     };
-    next = pushLog(next, "log.noMeal", undefined, "system");
+    next = pushLog(next, "log.noMeal", { penalty: noMealPenaltyPercent }, "system");
   }
 
   next = normalizeAfterAction(next);

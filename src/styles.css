@@ -462,7 +462,6 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  position: relative;
 }
 
 #lobby-title {
@@ -475,10 +474,20 @@ textarea {
   gap: 10px;
 }
 
+.lobby-quick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .lobby-gear-button {
-  position: absolute;
-  top: 14px;
-  right: 14px;
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+}
+
+.lobby-sound-button {
   width: 38px;
   height: 38px;
   min-height: 38px;
@@ -659,7 +668,8 @@ textarea {
   background: rgba(11, 15, 20, 0.06);
 }
 
-#btn-mini-sound.muted {
+#btn-mini-sound.muted,
+#btn-lobby-sound.muted {
   opacity: 0.62;
 }
 

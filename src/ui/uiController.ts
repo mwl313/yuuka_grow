@@ -75,6 +75,7 @@ interface UiRefs {
   endingConditionOverlay: HTMLElement;
   btnStart: HTMLButtonElement;
   btnSettings: HTMLButtonElement;
+  btnLobbySound: HTMLButtonElement;
   btnNickname: HTMLButtonElement;
   btnLeaderboard: HTMLButtonElement;
   btnCredits: HTMLButtonElement;
@@ -306,7 +307,6 @@ export class UiController {
       <div class="app-shell font-plain">
         <section id="screen-lobby" class="screen">
           <div class="skin-panel ui-panel ui-panel--accented lobby-card">
-            <button id="btn-settings" class="lobby-gear-button ui-btn ui-btn--icon font-title" type="button" aria-label=""></button>
             <h1 id="lobby-title" class="font-title"></h1>
             <p id="lobby-version"></p>
             <p id="lobby-nickname" class="lobby-foot"></p>
@@ -314,6 +314,10 @@ export class UiController {
               <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka_dance.gif" alt="" />
             </div>
             <div class="lobby-menu">
+              <div class="lobby-quick-actions">
+                <button id="btn-settings" class="lobby-gear-button ui-btn ui-btn--icon font-title" type="button" aria-label=""></button>
+                <button id="btn-lobby-sound" class="lobby-sound-button ui-btn ui-btn--icon font-title" type="button" aria-label="Sound">🔊</button>
+              </div>
               <button id="btn-start" class="skin-button ui-btn ui-btn--primary font-title lobby-primary-button"></button>
               <div class="lobby-secondary-grid">
                 <button id="btn-nickname" class="skin-button ui-btn ui-btn--secondary font-title"></button>
@@ -598,6 +602,7 @@ export class UiController {
       endingConditionOverlay: pick("ending-condition-overlay"),
       btnStart: pick("btn-start"),
       btnSettings: pick("btn-settings"),
+      btnLobbySound: pick("btn-lobby-sound"),
       btnNickname: pick("btn-nickname"),
       btnLeaderboard: pick("btn-leaderboard"),
       btnCredits: pick("btn-credits"),
@@ -842,7 +847,13 @@ export class UiController {
   }
 
   private updateEndingBookButtonLabel(): void {
-    this.refs.btnEndingBook.textContent = t("lobby.btnEndingBook");
+    const { collected, total } = this.getEndingBookCounts();
+    const label = t("lobby.btnEndingBook");
+    this.refs.btnEndingBook.textContent = t("lobby.btnEndingBookWithProgress", {
+      label,
+      collected,
+      total,
+    });
   }
 
   private renderGuideBody(): void {
@@ -852,7 +863,21 @@ export class UiController {
       .map((section) => section.trim())
       .filter((section) => section.length > 0);
 
-    const headingSet = new Set(["행동", "주의", "Actions", "Caution", "行動", "注意"]);
+    const headingSet = new Set([
+      "최강의 허벅지를 키워라!",
+      "행동",
+      "랜덤 버프 카드",
+      "주의",
+      "Your Goal",
+      "Raise the Strongest Thighs!",
+      "Actions",
+      "Random Buff Cards",
+      "Caution",
+      "最強の太ももを育てろ！",
+      "行動",
+      "ランダムバフカード",
+      "注意",
+    ]);
     this.refs.guideBody.innerHTML = "";
 
     for (const section of sections) {
@@ -1052,7 +1077,7 @@ export class UiController {
   }
 
   private resolveGuestOutcomeLabel(outcomeId: string): string {
-    if (outcomeId === "success" || outcomeId === "jackpot") return t("cheatsheet.outcome.success");
+    if (outcomeId === "success" || outcomeId === "jackpot") return t("cheatsheet.outcome.jackpot");
     if (outcomeId === "loss" || outcomeId === "slip") return t("cheatsheet.outcome.fail");
     return t("cheatsheet.outcome.default");
   }
@@ -1106,6 +1131,7 @@ export class UiController {
     [
       this.refs.btnStart,
       this.refs.btnSettings,
+      this.refs.btnLobbySound,
       this.refs.btnNickname,
       this.refs.btnLeaderboard,
       this.refs.btnCredits,
@@ -1144,6 +1170,7 @@ export class UiController {
 
     this.refs.btnStart.addEventListener("click", () => this.startGame());
     this.refs.btnSettings.addEventListener("click", () => this.openSettings(true));
+    this.refs.btnLobbySound.addEventListener("click", () => this.toggleMasterMute());
     this.refs.btnNickname.addEventListener("click", () => this.openNicknameModal(true));
     this.refs.btnLeaderboard.addEventListener("click", () => {
       void this.openLeaderboard();
@@ -1169,7 +1196,11 @@ export class UiController {
     });
     this.refs.btnWork.addEventListener("click", () => this.handleActionClick(() => applyWork(this.state)));
     this.refs.btnEat.addEventListener("click", () => this.handleActionClick(() => applyEat(this.state)));
-    this.refs.btnGuest.addEventListener("click", () => this.handleActionClick(() => applyGuest(this.state, defaultRng)));
+    this.refs.btnGuest.addEventListener("click", () =>
+      this.handleActionClick(() =>
+        applyGuest(this.state, defaultRng, (endingId) => hasEnding(endingId, this.endingCollection)),
+      ),
+    );
     this.refs.btnContinue.addEventListener("click", () => {
       if (this.endingPanelMode === "preview") {
         this.toggleEnding(false);
@@ -1754,8 +1785,11 @@ export class UiController {
   }
 
   private updateSoundToggleUi(): void {
+    const icon = this.settings.masterMuted ? "🔇" : "🔊";
     this.refs.btnMiniSound.classList.toggle("muted", this.settings.masterMuted);
-    this.refs.btnMiniSound.textContent = this.settings.masterMuted ? "🔇" : "🔊";
+    this.refs.btnLobbySound.classList.toggle("muted", this.settings.masterMuted);
+    this.refs.btnMiniSound.textContent = icon;
+    this.refs.btnLobbySound.textContent = icon;
   }
 
   private showScreen(screen: ScreenId): void {
