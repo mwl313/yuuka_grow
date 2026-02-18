@@ -101,7 +101,7 @@ const BUFF_RANGE_CONFIG: Record<BuffKey, BuffRangeConfig> = {
   },
 };
 
-export const BUFF_CARD_STAGE_MILESTONES = [5, 10, 15, 19, 23, 27, 31, 35, 39] as const;
+export const BUFF_CARD_STAGE_MILESTONES = [2, 5, 10, 15, 19, 23, 27, 31, 35, 39] as const;
 
 export function createInitialBuffMultipliers(): BuffMultipliers {
   return {
