@@ -1070,6 +1070,35 @@ textarea {
   font-size: 14px;
 }
 
+#credits-body {
+  max-height: min(65vh, 420px);
+  overflow-y: auto;
+  padding-right: 6px;
+  line-height: 1.6;
+}
+
+#credits-body .credits-block {
+  margin: 0 0 10px;
+  white-space: pre-line;
+}
+
+#credits-body .credits-block:last-child {
+  margin-bottom: 0;
+}
+
+#credits-body .credits-line {
+  display: block;
+  margin: 0 0 4px;
+}
+
+#credits-body .credits-line:last-child {
+  margin-bottom: 0;
+}
+
+#credits-body .credits-label {
+  font-weight: 800;
+}
+
 #guide-body {
   max-height: min(60vh, 420px);
   overflow-y: auto;
@@ -1090,6 +1119,50 @@ textarea {
   font-weight: 800;
   font-size: 16px;
   color: var(--text-0);
+}
+
+#guide-body .guide-action-name {
+  font-weight: 800;
+  color: var(--text-0);
+}
+
+#guide-body .guide-effect-good {
+  color: #1a8f3a;
+  font-weight: 700;
+}
+
+#guide-body .guide-effect-bad {
+  color: #c93a3a;
+  font-weight: 700;
+}
+
+#guide-body .guide-rainbow {
+  display: inline-block;
+  font-weight: 800;
+  background: linear-gradient(
+    90deg,
+    #ff4d4d 0%,
+    #ff9a3c 16%,
+    #f7d046 32%,
+    #42c56b 48%,
+    #4db5ff 64%,
+    #7d6bff 80%,
+    #ff5fc8 100%
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: guide-rainbow-shift 3.6s linear infinite;
+}
+
+@keyframes guide-rainbow-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
 }
 
 .cheatsheet-card {

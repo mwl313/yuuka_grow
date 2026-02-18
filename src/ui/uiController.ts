@@ -465,7 +465,7 @@ export class UiController {
         <div id="credits-modal" class="overlay hidden">
           <div class="skin-panel ui-panel modal-card panel-transition-card">
             <h2 id="credits-title" class="font-title"></h2>
-            <p id="credits-body" class="modal-temp-body"></p>
+            <div id="credits-body" class="modal-temp-body"></div>
             <button id="btn-close-credits" class="skin-button ui-btn ui-btn--secondary font-title"></button>
           </div>
         </div>
@@ -716,7 +716,7 @@ export class UiController {
     this.refs.btnNicknameApply.textContent = t("nickname.apply");
     this.refs.btnNicknameCancel.textContent = t("nickname.cancel");
     this.refs.creditsTitle.textContent = t("credits.title");
-    this.refs.creditsBody.textContent = t("credits.body");
+    this.renderCreditsBody();
     this.refs.guideTitle.textContent = t("guide.title");
     this.renderGuideBody();
     this.refs.cheatSheetTitle.textContent = t("cheatsheet.title");
@@ -781,10 +781,138 @@ export class UiController {
       block.className = "guide-block";
       if (headingSet.has(section)) {
         block.classList.add("guide-block--heading");
+        block.textContent = section;
+      } else {
+        const html = this.formatGuideSectionHtml(section);
+        if (html) {
+          block.innerHTML = html;
+        } else {
+          block.textContent = section;
+        }
       }
-      block.textContent = section;
       this.refs.guideBody.append(block);
     }
+  }
+
+  private renderCreditsBody(): void {
+    const body = t("credits.body");
+    const sections = body
+      .split(/\r?\n\s*\r?\n/g)
+      .map((section) => section.trim())
+      .filter((section) => section.length > 0);
+
+    this.refs.creditsBody.innerHTML = "";
+    for (const section of sections) {
+      const block = document.createElement("p");
+      block.className = "credits-block";
+      const lines = section
+        .split(/\r?\n/g)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      for (const line of lines) {
+        const lineEl = document.createElement("span");
+        lineEl.className = "credits-line";
+        const labelMatch = line.match(/^([^:]+:)\s*(.+)$/);
+        if (labelMatch) {
+          const label = document.createElement("strong");
+          label.className = "credits-label";
+          label.textContent = labelMatch[1];
+          const value = document.createElement("span");
+          value.className = "credits-value";
+          value.textContent = ` ${labelMatch[2]}`;
+          lineEl.append(label, value);
+        } else {
+          lineEl.textContent = line;
+        }
+        block.append(lineEl);
+      }
+      this.refs.creditsBody.append(block);
+    }
+  }
+
+  private formatGuideSectionHtml(section: string): string | null {
+    const match = section.match(/^(💼|🍚|🎲)\s*([^:]+):\s*(.+)$/);
+    if (!match) return null;
+
+    const [, emoji, actionName, rawEffects] = match;
+    const effects = rawEffects
+      .split("/")
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+    const renderedEffects = effects
+      .map((part) => this.formatGuideEffectPart(part))
+      .join(" / ");
+
+    return `${emoji} <strong class="guide-action-name">${this.escapeHtml(actionName)}</strong>: ${renderedEffects}`;
+  }
+
+  private getGuideEffectToneClass(part: string): "guide-effect-good" | "guide-effect-bad" | "" {
+    const hasUp = part.includes("↑");
+    const hasDown = part.includes("↓");
+    if (!hasUp && !hasDown) return "";
+
+    const isStress = /스트레스|stress|ストレス/i.test(part);
+    const isCredit = /크레딧|credit|credits|クレジット/i.test(part);
+    const isThigh = /허벅지|thigh|太もも/i.test(part);
+
+    if (isStress) {
+      return hasDown ? "guide-effect-good" : "guide-effect-bad";
+    }
+
+    if (isCredit || isThigh) {
+      return hasUp ? "guide-effect-good" : "guide-effect-bad";
+    }
+
+    return "";
+  }
+
+  private formatGuideEffectPart(part: string): string {
+    const toneClass = this.getGuideEffectToneClass(part);
+    const highlighted = this.highlightGuideRainbowText(part);
+    if (!toneClass) return highlighted;
+    return `<span class="${toneClass}">${highlighted}</span>`;
+  }
+
+  private highlightGuideRainbowText(part: string): string {
+    const ranges: Array<{ start: number; end: number }> = [];
+
+    const koIndex = part.indexOf("랜덤 효과");
+    if (koIndex >= 0) {
+      ranges.push({ start: koIndex, end: koIndex + "랜덤 효과".length });
+    }
+
+    const enLower = part.toLowerCase();
+    const enNeedle = "random effect";
+    const enIndex = enLower.indexOf(enNeedle);
+    if (enIndex >= 0) {
+      ranges.push({ start: enIndex, end: enIndex + enNeedle.length });
+    }
+
+    const jaIndex = part.indexOf("ランダム効果");
+    if (jaIndex >= 0) {
+      ranges.push({ start: jaIndex, end: jaIndex + "ランダム効果".length });
+    }
+
+    if (ranges.length === 0) {
+      return this.escapeHtml(part);
+    }
+
+    ranges.sort((a, b) => a.start - b.start);
+    const selected = ranges[0];
+    const before = this.escapeHtml(part.slice(0, selected.start));
+    const target = this.escapeHtml(part.slice(selected.start, selected.end));
+    const after = this.escapeHtml(part.slice(selected.end));
+    return `${before}<span class="guide-rainbow">${target}</span>${after}`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
   }
 
   private renderGuestCheatSheet(): void {
