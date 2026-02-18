@@ -1687,23 +1687,23 @@ export class UiController {
   private renderCurrentBuffsOverlay(): void {
     const formatMult = (value: number): string => `x${value.toFixed(2)}`;
     const summaryItems = [
-      { label: t("buff.creditGain"), value: this.state.buffs.creditGainMult },
-      { label: t("buff.thighGain"), value: this.state.buffs.thighGainMult },
-      { label: t("buff.stressGain"), value: this.state.buffs.stressGainMult },
-      { label: t("buff.makiProb"), value: this.state.buffs.makiWinProbMult },
-      { label: t("buff.koyukiProb"), value: this.state.buffs.koyukiWinProbMult },
-      { label: t("buff.guestCost"), value: this.state.buffs.guestCostMult },
-      { label: t("buff.eatCost"), value: this.state.buffs.eatCostMult },
-      { label: t("buff.noEatPenalty"), value: this.state.buffs.noEatPenaltyMult },
+      { label: t("buff.creditGain"), value: this.state.buffs.creditGainMult, inverseColor: false },
+      { label: t("buff.thighGain"), value: this.state.buffs.thighGainMult, inverseColor: false },
+      { label: t("buff.makiProb"), value: this.state.buffs.makiWinProbMult, inverseColor: false },
+      { label: t("buff.koyukiProb"), value: this.state.buffs.koyukiWinProbMult, inverseColor: false },
+      { label: t("buff.stressGain"), value: this.state.buffs.stressGainMult, inverseColor: true },
+      { label: t("buff.guestCost"), value: this.state.buffs.guestCostMult, inverseColor: true },
+      { label: t("buff.eatCost"), value: this.state.buffs.eatCostMult, inverseColor: true },
+      { label: t("buff.noEatPenalty"), value: this.state.buffs.noEatPenaltyMult, inverseColor: true },
     ];
     this.refs.currentBuffsSummary.innerHTML = "";
     for (const item of summaryItems) {
       const row = document.createElement("p");
       row.className = "current-buffs-summary-line";
       if (item.value > 1) {
-        row.classList.add("current-buffs-summary-line--up");
+        row.classList.add(item.inverseColor ? "current-buffs-summary-line--down" : "current-buffs-summary-line--up");
       } else if (item.value < 1) {
-        row.classList.add("current-buffs-summary-line--down");
+        row.classList.add(item.inverseColor ? "current-buffs-summary-line--up" : "current-buffs-summary-line--down");
       }
       row.textContent = `${item.label} ${formatMult(item.value)}`;
       this.refs.currentBuffsSummary.append(row);
