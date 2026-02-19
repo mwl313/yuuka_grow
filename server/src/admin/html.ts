@@ -10,6 +10,9 @@ export function renderAdminPageHtml(): string {
     main { max-width: 1200px; margin: 0 auto; padding: 20px; display: grid; gap: 12px; }
     .card { background: #fff; border: 1px solid #d9e2f2; border-radius: 12px; padding: 14px; box-shadow: 0 10px 24px rgba(30, 46, 78, 0.08); }
     h1 { margin: 0; font-size: 1.3rem; }
+    h2, h3 { margin: 0; }
+    h2 { font-size: 1.05rem; }
+    h3 { font-size: 0.95rem; color: #2a3e60; }
     form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: end; }
     label { display: grid; gap: 4px; font-size: 13px; }
     input { min-height: 36px; border: 1px solid #b6c8e5; border-radius: 8px; padding: 6px 8px; }
@@ -20,6 +23,13 @@ export function renderAdminPageHtml(): string {
     .table-wrap { overflow: auto; max-height: 72vh; }
     .row-actions { display: inline-flex; gap: 6px; }
     .status { font-size: 13px; min-height: 18px; margin: 0; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+    .metrics-card { border: 1px solid #d9e2f2; border-radius: 10px; padding: 10px; background: #f9fbff; display: grid; gap: 4px; }
+    .metrics-card .label { font-size: 12px; color: #44608b; }
+    .metrics-card .value { font-size: 18px; font-weight: 700; color: #16243b; }
+    .metrics-section { display: grid; gap: 8px; margin-top: 10px; }
+    .metrics-table-wrap { max-height: 280px; }
+    .metrics-table { min-width: 520px; }
     @media (max-width: 900px) { form { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
@@ -40,6 +50,34 @@ export function renderAdminPageHtml(): string {
         </label>
         <button id="btn-search" type="submit">Search</button>
       </form>
+    </section>
+    <section class="card">
+      <h2>Metrics</h2>
+      <p class="status" id="metrics-status"></p>
+      <div class="row-actions">
+        <button id="btn-metrics-refresh" type="button">Refresh Metrics</button>
+      </div>
+      <div id="metrics-summary" class="metrics-grid"></div>
+      <div class="metrics-section">
+        <h3>D1 Retention (Last 14 Days)</h3>
+        <div class="table-wrap metrics-table-wrap">
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th>day</th>
+                <th>D0 users</th>
+                <th>D+1 retained</th>
+                <th>D1 retention</th>
+              </tr>
+            </thead>
+            <tbody id="retention-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="metrics-section">
+        <h3>Session Length (Today)</h3>
+        <div id="session-stats" class="metrics-grid"></div>
+      </div>
     </section>
     <section class="card table-wrap">
       <table>
@@ -68,6 +106,11 @@ export function renderAdminPageHtml(): string {
       limit: document.getElementById("limit"),
       status: document.getElementById("status"),
       body: document.getElementById("result-body"),
+      metricsStatus: document.getElementById("metrics-status"),
+      metricsSummary: document.getElementById("metrics-summary"),
+      retentionBody: document.getElementById("retention-body"),
+      sessionStats: document.getElementById("session-stats"),
+      btnMetricsRefresh: document.getElementById("btn-metrics-refresh"),
     };
 
     function esc(value) {
@@ -81,6 +124,16 @@ export function renderAdminPageHtml(): string {
 
     function setStatus(text) {
       refs.status.textContent = text || "";
+    }
+
+    function setMetricsStatus(text) {
+      refs.metricsStatus.textContent = text || "";
+    }
+
+    function fmtNumber(value, digits) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return "-";
+      return digits === undefined ? num.toLocaleString() : num.toFixed(digits);
     }
 
     function qs(params) {
@@ -124,6 +177,77 @@ export function renderAdminPageHtml(): string {
             "</div></td>",
         ].join("");
         refs.body.appendChild(tr);
+      }
+    }
+
+    function renderMetricsSummary(summary) {
+      const cards = [
+        { label: "DAU Today", value: fmtNumber(summary.dauToday) },
+        { label: "DAU Yesterday", value: fmtNumber(summary.dauYesterday) },
+        { label: "DAU 7-day Avg", value: fmtNumber(summary.dau7Avg, 2) },
+        { label: "Sessions Today", value: fmtNumber(summary.sessionsToday) },
+        { label: "Avg Session Today (min)", value: fmtNumber(summary.avgSessionMinutesToday, 2) },
+        { label: "Leaderboard Submits Today", value: fmtNumber(summary.submitsToday) },
+      ];
+      refs.metricsSummary.innerHTML = cards
+        .map(
+          (card) =>
+            '<div class="metrics-card"><div class="label">' +
+            esc(card.label) +
+            '</div><div class="value">' +
+            esc(card.value) +
+            "</div></div>",
+        )
+        .join("");
+    }
+
+    function renderRetention(rows) {
+      refs.retentionBody.innerHTML = "";
+      for (const row of rows || []) {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td>" +
+          esc(row.day) +
+          "</td><td>" +
+          esc(fmtNumber(row.d0Users)) +
+          "</td><td>" +
+          esc(fmtNumber(row.d1Retained)) +
+          "</td><td>" +
+          esc(fmtNumber(row.d1RetentionPct, 1) + "%") +
+          "</td>";
+        refs.retentionBody.appendChild(tr);
+      }
+    }
+
+    function renderSessionStats(stats) {
+      const cards = [
+        { label: "Sessions Count", value: fmtNumber(stats.count) },
+        { label: "Mean (min)", value: fmtNumber(stats.meanMinutes, 2) },
+        { label: "Median p50 (min)", value: fmtNumber(stats.p50Minutes, 2) },
+        { label: "p90 (min)", value: fmtNumber(stats.p90Minutes, 2) },
+      ];
+      refs.sessionStats.innerHTML = cards
+        .map(
+          (card) =>
+            '<div class="metrics-card"><div class="label">' +
+            esc(card.label) +
+            '</div><div class="value">' +
+            esc(card.value) +
+            "</div></div>",
+        )
+        .join("");
+    }
+
+    async function loadMetrics() {
+      setMetricsStatus("Loading metrics...");
+      try {
+        const res = await api("/admin/api/metrics");
+        renderMetricsSummary(res.summary || {});
+        renderRetention(res.retention || []);
+        renderSessionStats(res.sessionLengthToday || {});
+        setMetricsStatus("Metrics updated for " + ((res.summary && res.summary.day) || "today"));
+      } catch (err) {
+        setMetricsStatus((err && err.message) || "Metrics load failed");
       }
     }
 
@@ -225,7 +349,12 @@ export function renderAdminPageHtml(): string {
       if (action === "delete") await deleteRow(shareId);
     });
 
+    refs.btnMetricsRefresh.addEventListener("click", async () => {
+      await loadMetrics();
+    });
+
     search();
+    loadMetrics();
   </script>
 </body>
 </html>`;
