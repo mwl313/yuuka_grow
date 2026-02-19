@@ -337,6 +337,12 @@ function parseAdminLimitParam(value: string | null): number {
 	return Math.min(200, Math.max(1, raw));
 }
 
+function parseAdminPageParam(value: string | null): number {
+	const raw = Number.parseInt(value ?? "", 10);
+	if (!Number.isFinite(raw)) return 1;
+	return Math.max(1, raw);
+}
+
 async function scalarNumber(db: D1Database, sql: string, bindings: unknown[] = []): Promise<number> {
 	const row = await db.prepare(sql).bind(...bindings).first<{ value: number | string }>();
 	if (!row) return 0;
@@ -646,6 +652,8 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 	const nicknameRaw = typeof url.searchParams.get("nickname") === "string" ? url.searchParams.get("nickname") ?? "" : "";
 	const nickname = nicknameRaw.trim().slice(0, 32);
 	const limit = parseAdminLimitParam(url.searchParams.get("limit"));
+	const page = parseAdminPageParam(url.searchParams.get("page"));
+	const offset = (page - 1) * limit;
 
 	const conditions: string[] = [];
 	const bindings: unknown[] = [];
@@ -658,6 +666,13 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 		bindings.push(`%${nickname}%`);
 	}
 	const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+	const countSql = `SELECT COUNT(*) AS value FROM runs ${whereClause}`;
+	const totalFiltered = await scalarNumber(env.DB, countSql, bindings);
+	const totalAll = await scalarNumber(env.DB, "SELECT COUNT(*) AS value FROM runs");
+	const totalPages = Math.max(1, Math.ceil(totalFiltered / limit));
+	const safePage = Math.min(page, totalPages);
+	const safeOffset = (safePage - 1) * limit;
+
 	const sql = `
 		SELECT
 			share_id,
@@ -677,10 +692,23 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 		${whereClause}
 		ORDER BY submitted_at_server DESC
 		LIMIT ?
+		OFFSET ?
 	`;
-	bindings.push(limit);
-	const rows = await env.DB.prepare(sql).bind(...bindings).all<RunRecord>();
-	return jsonResponse({ ok: true, items: rows.results ?? [] }, 200, origin);
+	const listBindings = [...bindings, limit, safeOffset];
+	const rows = await env.DB.prepare(sql).bind(...listBindings).all<RunRecord>();
+	return jsonResponse(
+		{
+			ok: true,
+			items: rows.results ?? [],
+			page: safePage,
+			limit,
+			totalFiltered,
+			totalAll,
+			totalPages,
+		},
+		200,
+		origin,
+	);
 }
 
 async function handleAdminRun(request: Request, env: AppEnv, origin: string | null): Promise<Response> {

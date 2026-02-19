@@ -21,6 +21,11 @@ export function renderAdminPageHtml(): string {
     th, td { border-bottom: 1px solid #e3eaf7; padding: 8px; text-align: left; vertical-align: top; font-size: 13px; white-space: nowrap; }
     th { background: #edf4ff; position: sticky; top: 0; z-index: 1; }
     .table-wrap { overflow: auto; max-height: 72vh; }
+    .table-section { display: grid; gap: 10px; }
+    .table-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+    .pagination { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .pagination button { min-height: 32px; min-width: 38px; }
+    .pagination button.active { background: #dde8fb; border-color: #5a7fb4; font-weight: 700; }
     .row-actions { display: inline-flex; gap: 6px; }
     .status { font-size: 13px; min-height: 18px; margin: 0; }
     .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
@@ -79,23 +84,29 @@ export function renderAdminPageHtml(): string {
         <div id="session-stats" class="metrics-grid"></div>
       </div>
     </section>
-    <section class="card table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>shareId</th>
-            <th>nickname</th>
-            <th>ending</th>
-            <th>days</th>
-            <th>credits</th>
-            <th>thigh</th>
-            <th>submitted_at</th>
-            <th>is_hidden</th>
-            <th>actions</th>
-          </tr>
-        </thead>
-        <tbody id="result-body"></tbody>
-      </table>
+    <section class="card table-section">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>shareId</th>
+              <th>nickname</th>
+              <th>ending</th>
+              <th>days</th>
+              <th>credits</th>
+              <th>thigh</th>
+              <th>submitted_at</th>
+              <th>is_hidden</th>
+              <th>actions</th>
+            </tr>
+          </thead>
+          <tbody id="result-body"></tbody>
+        </table>
+      </div>
+      <div class="table-meta">
+        <p class="status" id="score-total"></p>
+        <div class="pagination" id="pagination"></div>
+      </div>
     </section>
   </main>
   <script>
@@ -106,11 +117,20 @@ export function renderAdminPageHtml(): string {
       limit: document.getElementById("limit"),
       status: document.getElementById("status"),
       body: document.getElementById("result-body"),
+      scoreTotal: document.getElementById("score-total"),
+      pagination: document.getElementById("pagination"),
       metricsStatus: document.getElementById("metrics-status"),
       metricsSummary: document.getElementById("metrics-summary"),
       retentionBody: document.getElementById("retention-body"),
       sessionStats: document.getElementById("session-stats"),
       btnMetricsRefresh: document.getElementById("btn-metrics-refresh"),
+    };
+    const paging = {
+      page: 1,
+      totalPages: 1,
+      limit: 50,
+      totalFiltered: 0,
+      totalAll: 0,
     };
 
     function esc(value) {
@@ -141,6 +161,7 @@ export function renderAdminPageHtml(): string {
       if (params.shareId) p.set("shareId", params.shareId);
       if (params.nickname) p.set("nickname", params.nickname);
       if (params.limit) p.set("limit", String(params.limit));
+      if (params.page) p.set("page", String(params.page));
       return p.toString();
     }
 
@@ -178,6 +199,46 @@ export function renderAdminPageHtml(): string {
         ].join("");
         refs.body.appendChild(tr);
       }
+    }
+
+    function renderScoreMeta() {
+      const base = "Total Scores: " + fmtNumber(paging.totalAll);
+      if (paging.totalFiltered !== paging.totalAll) {
+        refs.scoreTotal.textContent = base + " | Filtered: " + fmtNumber(paging.totalFiltered);
+      } else {
+        refs.scoreTotal.textContent = base;
+      }
+    }
+
+    function renderPagination() {
+      refs.pagination.innerHTML = "";
+      if (paging.totalPages <= 1) return;
+
+      const makeButton = (label, page, disabled, isActive) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = label;
+        btn.dataset.page = String(page);
+        btn.disabled = disabled;
+        if (isActive) btn.classList.add("active");
+        return btn;
+      };
+
+      refs.pagination.appendChild(makeButton("Prev", Math.max(1, paging.page - 1), paging.page <= 1, false));
+
+      const maxWindow = 7;
+      let start = Math.max(1, paging.page - Math.floor(maxWindow / 2));
+      let end = Math.min(paging.totalPages, start + maxWindow - 1);
+      if (end - start + 1 < maxWindow) {
+        start = Math.max(1, end - maxWindow + 1);
+      }
+      for (let p = start; p <= end; p += 1) {
+        refs.pagination.appendChild(makeButton(String(p), p, false, p === paging.page));
+      }
+
+      refs.pagination.appendChild(
+        makeButton("Next", Math.min(paging.totalPages, paging.page + 1), paging.page >= paging.totalPages, false),
+      );
     }
 
     function renderMetricsSummary(summary) {
@@ -251,17 +312,38 @@ export function renderAdminPageHtml(): string {
       }
     }
 
-    async function search() {
+    async function search(options) {
+      const resetPage = options && options.resetPage === true;
+      if (resetPage) paging.page = 1;
       setStatus("Loading...");
+      const requestedLimit = Number.parseInt(refs.limit.value.trim(), 10);
+      if (Number.isFinite(requestedLimit) && requestedLimit > 0) {
+        paging.limit = Math.min(200, Math.max(1, requestedLimit));
+      }
       const params = {
         shareId: refs.shareId.value.trim(),
         nickname: refs.nickname.value.trim(),
-        limit: refs.limit.value.trim(),
+        limit: paging.limit,
+        page: paging.page,
       };
       try {
         const res = await api("/admin/api/search?" + qs(params));
         renderRows(res.items || []);
-        setStatus("Loaded " + (res.items || []).length + " rows");
+        paging.page = Number(res.page || paging.page);
+        paging.totalPages = Number(res.totalPages || 1);
+        paging.totalFiltered = Number(res.totalFiltered || 0);
+        paging.totalAll = Number(res.totalAll || 0);
+        renderScoreMeta();
+        renderPagination();
+        setStatus(
+          "Loaded " +
+            (res.items || []).length +
+            " rows (page " +
+            paging.page +
+            "/" +
+            paging.totalPages +
+            ")",
+        );
       } catch (err) {
         setStatus(err.message || "Search failed");
       }
@@ -335,7 +417,7 @@ export function renderAdminPageHtml(): string {
 
     refs.form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      await search();
+      await search({ resetPage: true });
     });
 
     refs.body.addEventListener("click", async (event) => {
@@ -351,6 +433,14 @@ export function renderAdminPageHtml(): string {
 
     refs.btnMetricsRefresh.addEventListener("click", async () => {
       await loadMetrics();
+    });
+    refs.pagination.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const page = Number.parseInt(target.dataset.page || "", 10);
+      if (!Number.isFinite(page) || page < 1 || page === paging.page) return;
+      paging.page = Math.min(Math.max(1, page), paging.totalPages);
+      await search();
     });
 
     search();
