@@ -41,6 +41,29 @@ interface RunRecord {
 	updated_at?: string | null;
 }
 
+interface TelemetryPayload {
+	anonId?: unknown;
+	sessionId?: unknown;
+	startedAt?: unknown;
+	ts?: unknown;
+	referrer?: unknown;
+}
+
+interface TelemetrySessionLengthRow {
+	minutes: number | string | null;
+}
+
+interface TelemetryDailyCountRow {
+	day: string;
+	dau: number | string;
+}
+
+interface TelemetryRetentionRow {
+	day: string;
+	d0_users: number | string;
+	d1_retained: number | string;
+}
+
 interface RankOutput {
 	rank: number;
 	total: number;
@@ -52,6 +75,7 @@ const CORS_HEADERS = "Content-Type";
 const ENDING_CATEGORY_SET = new Set<EndingCategory>(["normal", "bankrupt", "stress", "special", "any"]);
 let runIdSchemaEnsured = false;
 let adminSchemaEnsured = false;
+let telemetrySchemaEnsured = false;
 
 function escapeHtml(input: string): string {
 	return input
@@ -191,6 +215,116 @@ async function ensureAdminSchema(db: D1Database): Promise<void> {
 	adminSchemaEnsured = true;
 }
 
+async function ensureTelemetrySchema(db: D1Database): Promise<void> {
+	if (telemetrySchemaEnsured) return;
+
+	await db
+		.prepare(
+			`CREATE TABLE IF NOT EXISTS telemetry_sessions (
+				session_id TEXT PRIMARY KEY,
+				anon_id TEXT NOT NULL,
+				started_at TEXT NOT NULL,
+				last_seen_at TEXT NOT NULL,
+				ended_at TEXT NULL,
+				user_agent TEXT NULL,
+				country TEXT NULL,
+				referrer TEXT NULL
+			)`,
+		)
+		.run();
+	await db
+		.prepare("CREATE INDEX IF NOT EXISTS telemetry_sessions_anon_started ON telemetry_sessions(anon_id, started_at)")
+		.run();
+	await db
+		.prepare(
+			`CREATE TABLE IF NOT EXISTS telemetry_daily (
+				day TEXT NOT NULL,
+				anon_id TEXT NOT NULL,
+				first_seen_at TEXT NOT NULL,
+				last_seen_at TEXT NOT NULL,
+				PRIMARY KEY (day, anon_id)
+			)`,
+		)
+		.run();
+	telemetrySchemaEnsured = true;
+}
+
+function normalizeTelemetryId(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	if (trimmed.length === 0 || trimmed.length > 80) return null;
+	return trimmed;
+}
+
+function normalizeTelemetryReferrer(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	return trimmed.slice(0, 256);
+}
+
+function normalizeTelemetryIso(value: unknown, fallbackIso: string): string {
+	if (typeof value !== "string") return fallbackIso;
+	const trimmed = value.trim();
+	if (!trimmed || trimmed.length > 80) return fallbackIso;
+	const date = new Date(trimmed);
+	if (Number.isNaN(date.getTime())) return fallbackIso;
+	return date.toISOString();
+}
+
+function toUtcDay(iso: string): string {
+	return iso.slice(0, 10);
+}
+
+function shiftUtcDay(day: string, diffDays: number): string {
+	const date = new Date(`${day}T00:00:00.000Z`);
+	date.setUTCDate(date.getUTCDate() + diffDays);
+	return toUtcDay(date.toISOString());
+}
+
+function listUtcDays(endDay: string, count: number): string[] {
+	const days: string[] = [];
+	for (let i = count - 1; i >= 0; i -= 1) {
+		days.push(shiftUtcDay(endDay, -i));
+	}
+	return days;
+}
+
+function percentileFromSorted(values: number[], ratio: number): number {
+	if (values.length === 0) return 0;
+	const clamped = Math.max(0, Math.min(1, ratio));
+	const index = Math.round((values.length - 1) * clamped);
+	return values[index] ?? 0;
+}
+
+function medianFromSorted(values: number[]): number {
+	if (values.length === 0) return 0;
+	const mid = Math.floor(values.length / 2);
+	if (values.length % 2 === 0) {
+		return ((values[mid - 1] ?? 0) + (values[mid] ?? 0)) / 2;
+	}
+	return values[mid] ?? 0;
+}
+
+function requestCountry(request: Request): string | null {
+	// Keep only coarse country code from Cloudflare metadata; never store raw IP.
+	const req = request as Request & { cf?: { country?: string } };
+	const country = req.cf?.country;
+	if (typeof country !== "string" || country.length === 0) return null;
+	return country.slice(0, 8);
+}
+
+async function upsertTelemetryDaily(db: D1Database, day: string, anonId: string, nowIso: string): Promise<void> {
+	await db
+		.prepare(
+			`INSERT INTO telemetry_daily (day, anon_id, first_seen_at, last_seen_at)
+			 VALUES (?, ?, ?, ?)
+			 ON CONFLICT(day, anon_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`,
+		)
+		.bind(day, anonId, nowIso, nowIso)
+		.run();
+}
+
 function normalizeShareId(value: unknown): string | null {
 	if (typeof value !== "string") return null;
 	const trimmed = value.trim();
@@ -201,6 +335,12 @@ function parseAdminLimitParam(value: string | null): number {
 	const raw = Number.parseInt(value ?? "", 10);
 	if (!Number.isFinite(raw)) return 50;
 	return Math.min(200, Math.max(1, raw));
+}
+
+function parseAdminPageParam(value: string | null): number {
+	const raw = Number.parseInt(value ?? "", 10);
+	if (!Number.isFinite(raw)) return 1;
+	return Math.max(1, raw);
 }
 
 async function scalarNumber(db: D1Database, sql: string, bindings: unknown[] = []): Promise<number> {
@@ -512,6 +652,8 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 	const nicknameRaw = typeof url.searchParams.get("nickname") === "string" ? url.searchParams.get("nickname") ?? "" : "";
 	const nickname = nicknameRaw.trim().slice(0, 32);
 	const limit = parseAdminLimitParam(url.searchParams.get("limit"));
+	const page = parseAdminPageParam(url.searchParams.get("page"));
+	const offset = (page - 1) * limit;
 
 	const conditions: string[] = [];
 	const bindings: unknown[] = [];
@@ -524,6 +666,13 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 		bindings.push(`%${nickname}%`);
 	}
 	const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+	const countSql = `SELECT COUNT(*) AS value FROM runs ${whereClause}`;
+	const totalFiltered = await scalarNumber(env.DB, countSql, bindings);
+	const totalAll = await scalarNumber(env.DB, "SELECT COUNT(*) AS value FROM runs");
+	const totalPages = Math.max(1, Math.ceil(totalFiltered / limit));
+	const safePage = Math.min(page, totalPages);
+	const safeOffset = (safePage - 1) * limit;
+
 	const sql = `
 		SELECT
 			share_id,
@@ -543,10 +692,23 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 		${whereClause}
 		ORDER BY submitted_at_server DESC
 		LIMIT ?
+		OFFSET ?
 	`;
-	bindings.push(limit);
-	const rows = await env.DB.prepare(sql).bind(...bindings).all<RunRecord>();
-	return jsonResponse({ ok: true, items: rows.results ?? [] }, 200, origin);
+	const listBindings = [...bindings, limit, safeOffset];
+	const rows = await env.DB.prepare(sql).bind(...listBindings).all<RunRecord>();
+	return jsonResponse(
+		{
+			ok: true,
+			items: rows.results ?? [],
+			page: safePage,
+			limit,
+			totalFiltered,
+			totalAll,
+			totalPages,
+		},
+		200,
+		origin,
+	);
 }
 
 async function handleAdminRun(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
@@ -671,12 +833,221 @@ async function handleAdminDelete(request: Request, env: AppEnv, origin: string |
 	return jsonResponse({ ok: true }, 200, origin);
 }
 
+async function handleTelemetrySessionStart(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureTelemetrySchema(env.DB);
+	const body = await readJsonBody<TelemetryPayload>(request);
+	if (!body) return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+
+	const anonId = normalizeTelemetryId(body.anonId);
+	const sessionId = normalizeTelemetryId(body.sessionId);
+	if (!anonId || !sessionId) return jsonResponse({ ok: false, error: "Invalid payload" }, 400, origin);
+
+	const nowIso = new Date().toISOString();
+	const startedAt = normalizeTelemetryIso(body.startedAt, nowIso);
+	const referrer = normalizeTelemetryReferrer(body.referrer) ?? normalizeTelemetryReferrer(request.headers.get("referer"));
+	const userAgent = request.headers.get("user-agent")?.slice(0, 256) ?? null;
+	const country = requestCountry(request);
+
+	await env.DB
+		.prepare(
+			`INSERT OR IGNORE INTO telemetry_sessions
+			 (session_id, anon_id, started_at, last_seen_at, ended_at, user_agent, country, referrer)
+			 VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`,
+		)
+		.bind(sessionId, anonId, startedAt, nowIso, userAgent, country, referrer)
+		.run();
+	await env.DB.prepare("UPDATE telemetry_sessions SET last_seen_at = ? WHERE session_id = ?").bind(nowIso, sessionId).run();
+	await upsertTelemetryDaily(env.DB, toUtcDay(nowIso), anonId, nowIso);
+
+	return jsonResponse({ ok: true }, 200, origin);
+}
+
+async function handleTelemetryHeartbeat(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureTelemetrySchema(env.DB);
+	const body = await readJsonBody<TelemetryPayload>(request);
+	if (!body) return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+
+	const anonId = normalizeTelemetryId(body.anonId);
+	const sessionId = normalizeTelemetryId(body.sessionId);
+	if (!anonId || !sessionId) return jsonResponse({ ok: false, error: "Invalid payload" }, 400, origin);
+
+	const nowIso = new Date().toISOString();
+	await env.DB.prepare("UPDATE telemetry_sessions SET last_seen_at = ? WHERE session_id = ?").bind(nowIso, sessionId).run();
+	await upsertTelemetryDaily(env.DB, toUtcDay(nowIso), anonId, nowIso);
+
+	return jsonResponse({ ok: true }, 200, origin);
+}
+
+async function handleTelemetrySessionEnd(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureTelemetrySchema(env.DB);
+	const body = await readJsonBody<TelemetryPayload>(request);
+	if (!body) return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+
+	const anonId = normalizeTelemetryId(body.anonId);
+	const sessionId = normalizeTelemetryId(body.sessionId);
+	if (!anonId || !sessionId) return jsonResponse({ ok: false, error: "Invalid payload" }, 400, origin);
+
+	const nowIso = new Date().toISOString();
+	await env.DB
+		.prepare("UPDATE telemetry_sessions SET ended_at = ?, last_seen_at = ? WHERE session_id = ?")
+		.bind(nowIso, nowIso, sessionId)
+		.run();
+	await upsertTelemetryDaily(env.DB, toUtcDay(nowIso), anonId, nowIso);
+
+	return jsonResponse({ ok: true }, 200, origin);
+}
+
+async function handleTelemetryApi(request: Request, env: AppEnv, origin: string | null, pathname: string): Promise<Response> {
+	if (request.method !== "POST") return jsonResponse({ ok: false, error: "Method Not Allowed" }, 405, origin);
+	if (pathname === "/api/telemetry/session_start") {
+		return handleTelemetrySessionStart(request, env, origin);
+	}
+	if (pathname === "/api/telemetry/heartbeat") {
+		return handleTelemetryHeartbeat(request, env, origin);
+	}
+	if (pathname === "/api/telemetry/session_end") {
+		return handleTelemetrySessionEnd(request, env, origin);
+	}
+	return jsonResponse({ ok: false, error: "Not Found" }, 404, origin);
+}
+
+async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<Response> {
+	await ensureAdminSchema(env.DB);
+	await ensureTelemetrySchema(env.DB);
+
+	const nowIso = new Date().toISOString();
+	const today = toUtcDay(nowIso);
+	const yesterday = shiftUtcDay(today, -1);
+	const sevenDays = listUtcDays(today, 7);
+	const retentionDays = listUtcDays(today, 14).reverse();
+	const sevenDayStart = sevenDays[0] ?? today;
+	const retentionStart = retentionDays[retentionDays.length - 1] ?? today;
+
+	const dauRows = await env.DB
+		.prepare(
+			`SELECT day, COUNT(DISTINCT anon_id) AS dau
+			 FROM telemetry_daily
+			 WHERE day BETWEEN ? AND ?
+			 GROUP BY day`,
+		)
+		.bind(sevenDayStart, today)
+		.all<TelemetryDailyCountRow>();
+	const dauMap = new Map<string, number>();
+	for (const row of dauRows.results ?? []) {
+		dauMap.set(row.day, Number(row.dau ?? 0));
+	}
+
+	const dauToday = dauMap.get(today) ?? 0;
+	const dauYesterday = dauMap.get(yesterday) ?? 0;
+	const dau7Avg = sevenDays.reduce((sum, day) => sum + (dauMap.get(day) ?? 0), 0) / Math.max(1, sevenDays.length);
+
+	const sessionsToday = await scalarNumber(
+		env.DB,
+		"SELECT COUNT(*) AS value FROM telemetry_sessions WHERE substr(started_at, 1, 10) = ?",
+		[today],
+	);
+	const avgSessionMinutesToday = Math.max(
+		0,
+		await scalarNumber(
+			env.DB,
+			`SELECT COALESCE(AVG((julianday(COALESCE(ended_at, last_seen_at)) - julianday(started_at)) * 24 * 60), 0) AS value
+			 FROM telemetry_sessions
+			 WHERE substr(started_at, 1, 10) = ?`,
+			[today],
+		),
+	);
+	const submitsToday = await scalarNumber(
+		env.DB,
+		"SELECT COUNT(*) AS value FROM runs WHERE substr(submitted_at_server, 1, 10) = ?",
+		[today],
+	);
+
+	const sessionLengthRows = await env.DB
+		.prepare(
+			`SELECT ((julianday(COALESCE(ended_at, last_seen_at)) - julianday(started_at)) * 24 * 60) AS minutes
+			 FROM telemetry_sessions
+			 WHERE substr(started_at, 1, 10) = ?
+			 ORDER BY minutes ASC
+			 LIMIT 5000`,
+		)
+		.bind(today)
+		.all<TelemetrySessionLengthRow>();
+	const minutes = (sessionLengthRows.results ?? [])
+		.map((row) => Number(row.minutes))
+		.filter((value) => Number.isFinite(value) && value >= 0);
+	const meanMinutes = minutes.length > 0 ? minutes.reduce((sum, value) => sum + value, 0) / minutes.length : 0;
+	const p50Minutes = medianFromSorted(minutes);
+	const p90Minutes = percentileFromSorted(minutes, 0.9);
+
+	const retentionRows = await env.DB
+		.prepare(
+			`SELECT
+				d0.day AS day,
+				COUNT(DISTINCT d0.anon_id) AS d0_users,
+				COUNT(DISTINCT d1.anon_id) AS d1_retained
+			 FROM telemetry_daily d0
+			 LEFT JOIN telemetry_daily d1
+				ON d1.anon_id = d0.anon_id
+				AND d1.day = date(d0.day, '+1 day')
+			 WHERE d0.day BETWEEN ? AND ?
+			 GROUP BY d0.day
+			 ORDER BY d0.day DESC`,
+		)
+		.bind(retentionStart, today)
+		.all<TelemetryRetentionRow>();
+	const retentionMap = new Map<string, { d0: number; retained: number }>();
+	for (const row of retentionRows.results ?? []) {
+		retentionMap.set(row.day, {
+			d0: Number(row.d0_users ?? 0),
+			retained: Number(row.d1_retained ?? 0),
+		});
+	}
+
+	const retention = retentionDays.map((day) => {
+		const row = retentionMap.get(day) ?? { d0: 0, retained: 0 };
+		const d1RetentionPct = row.d0 > 0 ? (row.retained / row.d0) * 100 : 0;
+		return {
+			day,
+			d0Users: row.d0,
+			d1Retained: row.retained,
+			d1RetentionPct,
+		};
+	});
+
+	return jsonResponse(
+		{
+			ok: true,
+			summary: {
+				day: today,
+				dauToday,
+				dauYesterday,
+				dau7Avg,
+				sessionsToday,
+				avgSessionMinutesToday,
+				submitsToday,
+			},
+			sessionLengthToday: {
+				count: minutes.length,
+				meanMinutes,
+				p50Minutes,
+				p90Minutes,
+			},
+			retention,
+		},
+		200,
+		origin,
+	);
+}
+
 async function handleAdminApi(request: Request, env: AppEnv, origin: string | null, pathname: string): Promise<Response> {
 	if (request.method === "GET" && pathname === "/admin/api/search") {
 		return handleAdminSearch(request, env, origin);
 	}
 	if (request.method === "GET" && pathname === "/admin/api/run") {
 		return handleAdminRun(request, env, origin);
+	}
+	if (request.method === "GET" && pathname === "/admin/api/metrics") {
+		return handleAdminMetrics(env, origin);
 	}
 	if (request.method === "POST" && pathname === "/admin/api/update") {
 		return handleAdminUpdate(request, env, origin);
@@ -899,6 +1270,9 @@ export default {
 		}
 
 		try {
+			if (pathname.startsWith("/api/telemetry/")) {
+				return await handleTelemetryApi(request, env, origin, pathname);
+			}
 			if (request.method === "POST" && pathname === "/api/submit") {
 				return await handleSubmit(request, env, origin);
 			}
