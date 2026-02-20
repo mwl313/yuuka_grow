@@ -30,6 +30,20 @@ export interface SubmitRunResponse {
   };
 }
 
+export interface RankPreviewPayload {
+  finalCredits: number;
+  finalThighCm: number;
+}
+
+export interface RankPreviewResponse {
+  ok: true;
+  computedAtServer: string;
+  rank: {
+    credit: RankEntry;
+    thigh: RankEntry;
+  };
+}
+
 export interface LeaderboardItem {
   nickname: string;
   ending_category: string;
@@ -73,6 +87,35 @@ export async function submitRun(payload: SubmitRunPayload): Promise<SubmitRunRes
     body: JSON.stringify(payload),
   });
   return parseJsonResponse<SubmitRunResponse>(response);
+}
+
+export async function fetchRankPreview(
+  payload: RankPreviewPayload,
+  timeoutMs = 3000,
+): Promise<RankPreviewResponse> {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId =
+    controller && timeoutMs > 0
+      ? window.setTimeout(() => {
+          controller.abort();
+        }, timeoutMs)
+      : null;
+
+  try {
+    const response = await fetch("/api/rank-preview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller?.signal,
+    });
+    return parseJsonResponse<RankPreviewResponse>(response);
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  }
 }
 
 export async function fetchLeaderboard(sort: LeaderboardSort, limit = 100): Promise<LeaderboardResponse> {

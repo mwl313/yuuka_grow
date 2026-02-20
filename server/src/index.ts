@@ -25,6 +25,11 @@ interface SubmitPayload {
 	clientVersion?: unknown;
 }
 
+interface RankPreviewPayload {
+	finalCredits?: unknown;
+	finalThighCm?: unknown;
+}
+
 interface RunRecord {
 	share_id?: string;
 	run_id?: string | null;
@@ -602,6 +607,32 @@ async function handleSubmit(request: Request, env: AppEnv, origin: string | null
 			ok: true,
 			shareId: resolvedShareId,
 			submittedAtServer: resolvedSubmittedAtServer,
+			rank: { credit, thigh },
+		},
+		200,
+		origin,
+	);
+}
+
+async function handleRankPreview(request: Request, env: AppEnv, origin: string | null): Promise<Response> {
+	let payload: RankPreviewPayload;
+	try {
+		payload = (await request.json()) as RankPreviewPayload;
+	} catch {
+		return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, origin);
+	}
+
+	const finalCredits = toNonNegativeInt(payload.finalCredits);
+	const finalThighCm = toNonNegativeInt(payload.finalThighCm);
+	const [credit, thigh] = await Promise.all([
+		computeRank(env.DB, "final_credits", finalCredits),
+		computeRank(env.DB, "final_thigh_cm", finalThighCm),
+	]);
+
+	return jsonResponse(
+		{
+			ok: true,
+			computedAtServer: new Date().toISOString(),
 			rank: { credit, thigh },
 		},
 		200,
@@ -1275,6 +1306,9 @@ export default {
 			}
 			if (request.method === "POST" && pathname === "/api/submit") {
 				return await handleSubmit(request, env, origin);
+			}
+			if (request.method === "POST" && pathname === "/api/rank-preview") {
+				return await handleRankPreview(request, env, origin);
 			}
 			if (request.method === "GET" && pathname === "/api/leaderboard") {
 				return await handleLeaderboard(request, env, origin);

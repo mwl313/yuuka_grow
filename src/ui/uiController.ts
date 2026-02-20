@@ -1,4 +1,4 @@
-import { buildShareUrl, fetchLeaderboard, submitRun } from "../api/leaderboardApi";
+import { buildShareUrl, fetchLeaderboard, fetchRankPreview, submitRun } from "../api/leaderboardApi";
 import type { LeaderboardItem, LeaderboardSort, RankEntry } from "../api/leaderboardApi";
 import { BgmManager } from "../audio/bgmManager";
 import { applyEat, applyGuest, applyWork } from "../core/actions";
@@ -136,6 +136,10 @@ interface UiRefs {
   scoreDay: HTMLElement;
   scoreCredits: HTMLElement;
   scoreStress: HTMLElement;
+  scoreRankCreditLabel: HTMLElement;
+  scoreRankCreditValue: HTMLElement;
+  scoreRankThighLabel: HTMLElement;
+  scoreRankThighValue: HTMLElement;
   scoreRankCreditPopup: HTMLElement;
   scoreRankThighPopup: HTMLElement;
   scoreUploadStatus: HTMLElement;
@@ -191,6 +195,11 @@ interface UploadedMeta {
   thigh: RankEntry;
 }
 
+interface ScoreRankMeta {
+  credit: RankEntry;
+  thigh: RankEntry;
+}
+
 interface BuffCardSlotView {
   button: HTMLButtonElement;
   rarity: HTMLDivElement;
@@ -232,6 +241,9 @@ const FLIP_MS = 120;
 const BOUNCE_MS = 180;
 const SELECTED_CARD_FX_MS = 280;
 const CARD_SELECT_ENABLE_DELAY_MS = 220;
+const SCORE_RANK_PREVIEW_TIMEOUT_MS = 3000;
+const SCORE_RANK_PREVIEW_RETRY_DELAY_MS = 300;
+const SCORE_RANK_PREVIEW_MAX_ATTEMPTS = 2;
 const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   work: "💼 ",
   eat: "🍚 ",
@@ -252,9 +264,13 @@ export class UiController {
   private settings: Settings;
   private latestResult: RunResult | null = null;
   private uploadedMeta: UploadedMeta | null = null;
+  private scoreRankMeta: ScoreRankMeta | null = null;
   private currentRunId = createRunId();
   private activeScreen: ScreenId = "lobby";
   private isUploading = false;
+  private isScoreRankLoading = false;
+  private scoreRankPreviewToken = 0;
+  private lastScoreRankPreviewKey: string | null = null;
   private leaderboardSort: LeaderboardSort = "credit";
   private leaderboardItems: LeaderboardItem[] = [];
   private leaderboardLoading = false;
@@ -402,6 +418,8 @@ export class UiController {
               <li class="score-row"><span class="score-label" id="score-label-day"></span><span class="score-value" id="score-day"></span></li>
               <li class="score-row"><span class="score-label" id="score-label-credits"></span><span class="score-value" id="score-credits"></span></li>
               <li class="score-row"><span class="score-label" id="score-label-stress"></span><span class="score-value" id="score-stress"></span></li>
+              <li class="score-row score-row--rank"><span class="score-label" id="score-rank-credit-label"></span><span class="score-value score-rank-value" id="score-rank-credit-value"></span></li>
+              <li class="score-row score-row--rank"><span class="score-label" id="score-rank-thigh-label"></span><span class="score-value score-rank-value" id="score-rank-thigh-value"></span></li>
             </ul>
             <p id="score-upload-status" class="score-upload-status"></p>
             <div class="stack-buttons">
@@ -661,6 +679,10 @@ export class UiController {
       scoreDay: pick("score-day"),
       scoreCredits: pick("score-credits"),
       scoreStress: pick("score-stress"),
+      scoreRankCreditLabel: pick("score-rank-credit-label"),
+      scoreRankCreditValue: pick("score-rank-credit-value"),
+      scoreRankThighLabel: pick("score-rank-thigh-label"),
+      scoreRankThighValue: pick("score-rank-thigh-value"),
       scoreRankCreditPopup: pick("score-rank-credit-popup"),
       scoreRankThighPopup: pick("score-rank-thigh-popup"),
       scoreUploadStatus: pick("score-upload-status"),
@@ -1339,8 +1361,12 @@ export class UiController {
     this.hasRunEndHapticFired = false;
     this.latestResult = null;
     this.uploadedMeta = null;
+    this.scoreRankMeta = null;
     this.currentRunId = createRunId();
     this.isUploading = false;
+    this.isScoreRankLoading = false;
+    this.scoreRankPreviewToken += 1;
+    this.lastScoreRankPreviewKey = null;
     this.openUploadResultPopup(false);
     this.save = {
       ...this.save,
@@ -1865,7 +1891,11 @@ export class UiController {
     this.renderEndingBook();
     this.latestResult = finalizedRun;
     this.uploadedMeta = null;
+    this.scoreRankMeta = null;
     this.isUploading = false;
+    this.isScoreRankLoading = false;
+    this.scoreRankPreviewToken += 1;
+    this.lastScoreRankPreviewKey = null;
     this.openUploadResultPopup(false);
     this.save = recordRunResult(
       {
@@ -2219,6 +2249,7 @@ export class UiController {
     });
     this.refs.scoreStress.textContent = formatNumber(this.latestResult.finalStress);
     this.updateScoreMeta();
+    void this.ensureScoreRankPreview();
   }
 
   private updateScoreMeta(messageKey?: string): void {
@@ -2229,19 +2260,84 @@ export class UiController {
         : t("score.btnUploadShare");
     this.refs.btnUploadShare.disabled = this.isUploading || !this.latestResult;
 
-    if (this.uploadedMeta) {
-      const credit = formatRankLine(this.uploadedMeta.credit);
-      const thigh = formatRankLine(this.uploadedMeta.thigh);
+    const rankMeta: ScoreRankMeta | null = this.uploadedMeta
+      ? {
+          credit: this.uploadedMeta.credit,
+          thigh: this.uploadedMeta.thigh,
+        }
+      : this.scoreRankMeta;
+
+    if (rankMeta) {
+      const credit = formatRankLine(rankMeta.credit);
+      const thigh = formatRankLine(rankMeta.thigh);
       this.refs.scoreRankCreditPopup.textContent = t("score.rank.credit", credit);
       this.refs.scoreRankThighPopup.textContent = t("score.rank.thigh", thigh);
+      this.refs.scoreRankCreditLabel.textContent = t("score.rank.left.credit", { percent: credit.percent });
+      this.refs.scoreRankThighLabel.textContent = t("score.rank.left.thigh", { percent: thigh.percent });
+      this.refs.scoreRankCreditValue.textContent = t("score.rank.right", { rank: credit.rank });
+      this.refs.scoreRankThighValue.textContent = t("score.rank.right", { rank: thigh.rank });
     } else {
       const pendingCredit = t("score.rank.pending.credit");
       const pendingThigh = t("score.rank.pending.thigh");
       this.refs.scoreRankCreditPopup.textContent = pendingCredit;
       this.refs.scoreRankThighPopup.textContent = pendingThigh;
+      this.refs.scoreRankCreditLabel.textContent = t("score.rank.left.credit.pending");
+      this.refs.scoreRankThighLabel.textContent = t("score.rank.left.thigh.pending");
+      this.refs.scoreRankCreditValue.textContent = "-";
+      this.refs.scoreRankThighValue.textContent = "-";
     }
 
     this.refs.scoreUploadStatus.textContent = messageKey ? t(messageKey) : "";
+  }
+
+  private buildScoreRankPreviewKey(): string | null {
+    if (!this.latestResult) return null;
+    const credits = Math.round(this.latestResult.finalMoney);
+    const thigh = Math.round(this.latestResult.finalThighCm);
+    return `${credits}:${thigh}`;
+  }
+
+  private async ensureScoreRankPreview(): Promise<void> {
+    if (!this.latestResult || this.uploadedMeta || this.isUploading) return;
+    const key = this.buildScoreRankPreviewKey();
+    if (!key) return;
+    if (this.lastScoreRankPreviewKey === key && (this.isScoreRankLoading || this.scoreRankMeta)) return;
+
+    this.lastScoreRankPreviewKey = key;
+    this.isScoreRankLoading = true;
+    this.scoreRankMeta = null;
+    this.updateScoreMeta();
+
+    const requestToken = ++this.scoreRankPreviewToken;
+    const payload = {
+      finalCredits: Math.round(this.latestResult.finalMoney),
+      finalThighCm: Math.round(this.latestResult.finalThighCm),
+    };
+
+    for (let attempt = 1; attempt <= SCORE_RANK_PREVIEW_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await fetchRankPreview(payload, SCORE_RANK_PREVIEW_TIMEOUT_MS);
+        if (requestToken !== this.scoreRankPreviewToken) return;
+        this.scoreRankMeta = {
+          credit: response.rank.credit,
+          thigh: response.rank.thigh,
+        };
+        this.isScoreRankLoading = false;
+        this.updateScoreMeta();
+        return;
+      } catch (error) {
+        if (requestToken !== this.scoreRankPreviewToken) return;
+        if (attempt >= SCORE_RANK_PREVIEW_MAX_ATTEMPTS) {
+          console.error(error);
+          this.isScoreRankLoading = false;
+          this.updateScoreMeta();
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, SCORE_RANK_PREVIEW_RETRY_DELAY_MS);
+        });
+      }
+    }
   }
 
   private async handleUploadShareClick(): Promise<void> {
@@ -2278,6 +2374,11 @@ export class UiController {
         credit: response.rank.credit,
         thigh: response.rank.thigh,
       };
+      this.scoreRankMeta = {
+        credit: response.rank.credit,
+        thigh: response.rank.thigh,
+      };
+      this.isScoreRankLoading = false;
       statusKey = "score.upload.success";
       this.openUploadResultPopup(true);
     } catch (error) {
