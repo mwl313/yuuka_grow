@@ -67,6 +67,8 @@ interface UiRefs {
   score: HTMLElement;
   leaderboard: HTMLElement;
   endingBook: HTMLElement;
+  lobbyVisual: HTMLElement;
+  lobbyDance: HTMLImageElement;
   settingsModal: HTMLElement;
   nicknameModal: HTMLElement;
   creditsModal: HTMLElement;
@@ -244,6 +246,8 @@ const CARD_SELECT_ENABLE_DELAY_MS = 220;
 const SCORE_RANK_PREVIEW_TIMEOUT_MS = 3000;
 const SCORE_RANK_PREVIEW_RETRY_DELAY_MS = 300;
 const SCORE_RANK_PREVIEW_MAX_ATTEMPTS = 2;
+const LOBBY_DANCE_ASSETS = ["/assets/lobby/yuuka1.gif", "/assets/lobby/yuuka2.gif", "/assets/lobby/yuuka3.gif"] as const;
+const LOBBY_SWIPE_THRESHOLD_PX = 32;
 const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   work: "💼 ",
   eat: "🍚 ",
@@ -294,6 +298,9 @@ export class UiController {
   private buffCardEnableTimerId?: number;
   private readonly cardSpinController: CardSpinController<BuffCardSelection>;
   private spinAudioContext: AudioContext | null = null;
+  private lobbyDanceIndex = 0;
+  private lobbySwipeStartX: number | null = null;
+  private lobbySwipeStartY: number | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -310,6 +317,7 @@ export class UiController {
     this.applyLabels();
     this.bindEvents();
     this.syncSettingsUi();
+    this.setRandomLobbyDance();
     this.renderGameUi(true);
     this.renderLeaderboard();
     this.showScreen("lobby");
@@ -325,8 +333,8 @@ export class UiController {
             <h1 id="lobby-title" class="font-title"></h1>
             <p id="lobby-version"></p>
             <p id="lobby-nickname" class="lobby-foot"></p>
-            <div class="lobby-visual">
-              <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka_dance.gif" alt="" />
+            <div id="lobby-visual" class="lobby-visual">
+              <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka1.gif" alt="" />
             </div>
             <div class="lobby-menu">
               <div class="lobby-quick-actions">
@@ -610,6 +618,8 @@ export class UiController {
       score: pick("screen-score"),
       leaderboard: pick("screen-leaderboard"),
       endingBook: pick("screen-ending-book"),
+      lobbyVisual: pick("lobby-visual"),
+      lobbyDance: pick("lobby-dance"),
       settingsModal: pick("settings-modal"),
       nicknameModal: pick("nickname-modal"),
       creditsModal: pick("credits-modal"),
@@ -1234,6 +1244,35 @@ export class UiController {
         },
       });
     });
+
+    this.refs.lobbyVisual.addEventListener(
+      "touchstart",
+      (event) => {
+        const touch = event.touches[0];
+        if (!touch) return;
+        this.lobbySwipeStartX = touch.clientX;
+        this.lobbySwipeStartY = touch.clientY;
+      },
+      { passive: true },
+    );
+    this.refs.lobbyVisual.addEventListener(
+      "touchend",
+      (event) => {
+        const touch = event.changedTouches[0];
+        if (!touch || this.lobbySwipeStartX === null || this.lobbySwipeStartY === null) {
+          this.lobbySwipeStartX = null;
+          this.lobbySwipeStartY = null;
+          return;
+        }
+        const deltaX = touch.clientX - this.lobbySwipeStartX;
+        const deltaY = touch.clientY - this.lobbySwipeStartY;
+        this.lobbySwipeStartX = null;
+        this.lobbySwipeStartY = null;
+        if (Math.abs(deltaX) < LOBBY_SWIPE_THRESHOLD_PX || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+        this.showNextLobbyDance();
+      },
+      { passive: true },
+    );
     this.refs.btnRetry.addEventListener("click", () => this.retryGame());
     this.refs.btnBack.addEventListener("click", () => {
       void this.transitionToLobby();
@@ -1802,13 +1841,34 @@ export class UiController {
   }
 
   private showScreen(screen: ScreenId): void {
+    const previousScreen = this.activeScreen;
     this.activeScreen = screen;
     this.refs.lobby.classList.toggle("active", screen === "lobby");
     this.refs.game.classList.toggle("active", screen === "game");
     this.refs.score.classList.toggle("active", screen === "score");
     this.refs.leaderboard.classList.toggle("active", screen === "leaderboard");
     this.refs.endingBook.classList.toggle("active", screen === "endingBook");
+    if (screen === "lobby" && previousScreen !== "lobby") {
+      this.setRandomLobbyDance();
+    }
     this.updateBgmContext();
+  }
+
+  private setRandomLobbyDance(): void {
+    const nextIndex = Math.floor(Math.random() * LOBBY_DANCE_ASSETS.length);
+    this.applyLobbyDanceIndex(nextIndex);
+  }
+
+  private showNextLobbyDance(): void {
+    this.applyLobbyDanceIndex(this.lobbyDanceIndex + 1);
+  }
+
+  private applyLobbyDanceIndex(nextIndex: number): void {
+    const normalized = ((nextIndex % LOBBY_DANCE_ASSETS.length) + LOBBY_DANCE_ASSETS.length) % LOBBY_DANCE_ASSETS.length;
+    this.lobbyDanceIndex = normalized;
+    const nextSrc = LOBBY_DANCE_ASSETS[normalized];
+    if (this.refs.lobbyDance.getAttribute("src") === nextSrc) return;
+    this.refs.lobbyDance.setAttribute("src", nextSrc);
   }
 
   private async openLeaderboard(): Promise<void> {

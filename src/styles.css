@@ -494,7 +494,18 @@ textarea {
 }
 
 .lobby-visual {
-  display: grid;
+  width: 100%;
+  height: clamp(180px, 34vh, 300px);
+  border-radius: 12px;
+  border: 1px solid rgba(15, 22, 36, 0.12);
+  background: rgba(255, 255, 255, 0.58);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .lobby-menu {
@@ -521,10 +532,12 @@ textarea {
 }
 
 .lobby-dance {
-  width: 50%;
-  height: auto;
-  justify-self: center;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
   display: block;
+  pointer-events: none;
 }
 
 .lobby-disclaimer {
@@ -1552,6 +1565,16 @@ textarea {
 .score-value {
   font-weight: 700;
   text-align: right;
+}
+
+.score-row--rank .score-label {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.score-rank-value {
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
 }
 
 .score-rank-line {
