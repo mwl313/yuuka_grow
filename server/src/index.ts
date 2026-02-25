@@ -5,6 +5,7 @@ import { getEndingTitle, type Lang } from "../../src/shared/endingMeta";
 
 type EndingCategory = "normal" | "bankrupt" | "stress" | "special" | "any";
 type SortKey = "credit" | "thigh";
+type AdminSearchSort = "date" | "credit" | "thigh";
 
 interface AppEnv {
 	DB: D1Database;
@@ -67,6 +68,32 @@ interface TelemetryRetentionRow {
 	day: string;
 	d0_users: number | string;
 	d1_retained: number | string;
+	d7_retained: number | string;
+	d14_retained: number | string;
+}
+
+interface TelemetryCountryRow {
+	country: string | null;
+	sessions: number | string;
+}
+
+interface TelemetryReferrerRow {
+	referrer: string | null;
+	sessions: number | string;
+}
+
+interface CountByEndingRow {
+	ending_id: string;
+	count: number | string;
+}
+
+interface StageBucketRow {
+	bucket: string;
+	count: number | string;
+}
+
+interface NumericValueRow {
+	value: number | string | null;
 }
 
 interface RankOutput {
@@ -311,6 +338,11 @@ function medianFromSorted(values: number[]): number {
 	return values[mid] ?? 0;
 }
 
+function safeRatio(numerator: number, denominator: number): number {
+	if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0;
+	return numerator / denominator;
+}
+
 function requestCountry(request: Request): string | null {
 	// Keep only coarse country code from Cloudflare metadata; never store raw IP.
 	const req = request as Request & { cf?: { country?: string } };
@@ -346,6 +378,11 @@ function parseAdminPageParam(value: string | null): number {
 	const raw = Number.parseInt(value ?? "", 10);
 	if (!Number.isFinite(raw)) return 1;
 	return Math.max(1, raw);
+}
+
+function parseAdminSortParam(value: string | null): AdminSearchSort {
+	if (value === "credit" || value === "thigh") return value;
+	return "date";
 }
 
 async function scalarNumber(db: D1Database, sql: string, bindings: unknown[] = []): Promise<number> {
@@ -682,6 +719,7 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 	const shareId = normalizeShareId(url.searchParams.get("shareId"));
 	const nicknameRaw = typeof url.searchParams.get("nickname") === "string" ? url.searchParams.get("nickname") ?? "" : "";
 	const nickname = nicknameRaw.trim().slice(0, 32);
+	const sort = parseAdminSortParam(url.searchParams.get("sort"));
 	const limit = parseAdminLimitParam(url.searchParams.get("limit"));
 	const page = parseAdminPageParam(url.searchParams.get("page"));
 	const offset = (page - 1) * limit;
@@ -703,6 +741,12 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 	const totalPages = Math.max(1, Math.ceil(totalFiltered / limit));
 	const safePage = Math.min(page, totalPages);
 	const safeOffset = (safePage - 1) * limit;
+	const orderBy =
+		sort === "credit"
+			? "final_credits DESC, submitted_at_server DESC"
+			: sort === "thigh"
+				? "final_thigh_cm DESC, submitted_at_server DESC"
+				: "submitted_at_server DESC";
 
 	const sql = `
 		SELECT
@@ -721,7 +765,7 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 			updated_at
 		FROM runs
 		${whereClause}
-		ORDER BY submitted_at_server DESC
+		ORDER BY ${orderBy}
 		LIMIT ?
 		OFFSET ?
 	`;
@@ -736,6 +780,7 @@ async function handleAdminSearch(request: Request, env: AppEnv, origin: string |
 			totalFiltered,
 			totalAll,
 			totalPages,
+			sort,
 		},
 		200,
 		origin,
@@ -950,7 +995,9 @@ async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<R
 	const today = toUtcDay(nowIso);
 	const yesterday = shiftUtcDay(today, -1);
 	const sevenDays = listUtcDays(today, 7);
+	const thirtyDays = listUtcDays(today, 30);
 	const retentionDays = listUtcDays(today, 14).reverse();
+	const mauStart = thirtyDays[0] ?? today;
 	const sevenDayStart = sevenDays[0] ?? today;
 	const retentionStart = retentionDays[retentionDays.length - 1] ?? today;
 
@@ -961,7 +1008,7 @@ async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<R
 			 WHERE day BETWEEN ? AND ?
 			 GROUP BY day`,
 		)
-		.bind(sevenDayStart, today)
+		.bind(mauStart, today)
 		.all<TelemetryDailyCountRow>();
 	const dauMap = new Map<string, number>();
 	for (const row of dauRows.results ?? []) {
@@ -971,6 +1018,34 @@ async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<R
 	const dauToday = dauMap.get(today) ?? 0;
 	const dauYesterday = dauMap.get(yesterday) ?? 0;
 	const dau7Avg = sevenDays.reduce((sum, day) => sum + (dauMap.get(day) ?? 0), 0) / Math.max(1, sevenDays.length);
+	const wau7 = await scalarNumber(
+		env.DB,
+		`SELECT COUNT(DISTINCT anon_id) AS value
+		 FROM telemetry_daily
+		 WHERE day BETWEEN ? AND ?`,
+		[sevenDayStart, today],
+	);
+	const mau30 = await scalarNumber(
+		env.DB,
+		`SELECT COUNT(DISTINCT anon_id) AS value
+		 FROM telemetry_daily
+		 WHERE day BETWEEN ? AND ?`,
+		[mauStart, today],
+	);
+	const stickiness = safeRatio(dauToday, mau30);
+
+	const newToday = await scalarNumber(
+		env.DB,
+		`SELECT COUNT(*) AS value
+		 FROM (
+			SELECT anon_id, MIN(day) AS first_day
+			FROM telemetry_daily
+			GROUP BY anon_id
+		 ) t
+		 WHERE t.first_day = ?`,
+		[today],
+	);
+	const returningToday = Math.max(0, dauToday - newToday);
 
 	const sessionsToday = await scalarNumber(
 		env.DB,
@@ -992,6 +1067,45 @@ async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<R
 		"SELECT COUNT(*) AS value FROM runs WHERE substr(submitted_at_server, 1, 10) = ?",
 		[today],
 	);
+	const bounceSessionsToday = await scalarNumber(
+		env.DB,
+		`SELECT COUNT(*) AS value
+		 FROM telemetry_sessions
+		 WHERE substr(started_at, 1, 10) = ?
+		   AND (strftime('%s', COALESCE(ended_at, last_seen_at)) - strftime('%s', started_at)) < 60`,
+		[today],
+	);
+	const engagedSessionsToday = await scalarNumber(
+		env.DB,
+		`SELECT COUNT(*) AS value
+		 FROM telemetry_sessions
+		 WHERE substr(started_at, 1, 10) = ?
+		   AND (strftime('%s', COALESCE(ended_at, last_seen_at)) - strftime('%s', started_at)) >= 180`,
+		[today],
+	);
+	const bounceRateToday = safeRatio(bounceSessionsToday, sessionsToday);
+	const engagedRateToday = safeRatio(engagedSessionsToday, sessionsToday);
+	const sessionsPerDAU = safeRatio(sessionsToday, dauToday);
+	const submitPerDAUToday = safeRatio(submitsToday, dauToday);
+	const submitPerSessionToday = safeRatio(submitsToday, sessionsToday);
+
+	const submits7d = await scalarNumber(
+		env.DB,
+		`SELECT COUNT(*) AS value
+		 FROM runs
+		 WHERE substr(submitted_at_server, 1, 10) BETWEEN ? AND ?`,
+		[sevenDayStart, today],
+	);
+	const dau7d = wau7;
+	const sessions7d = await scalarNumber(
+		env.DB,
+		`SELECT COUNT(*) AS value
+		 FROM telemetry_sessions
+		 WHERE substr(started_at, 1, 10) BETWEEN ? AND ?`,
+		[sevenDayStart, today],
+	);
+	const submitPerDAU7d = safeRatio(submits7d, dau7d);
+	const submitPerSession7d = safeRatio(submits7d, sessions7d);
 
 	const sessionLengthRows = await env.DB
 		.prepare(
@@ -1015,35 +1129,169 @@ async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<R
 			`SELECT
 				d0.day AS day,
 				COUNT(DISTINCT d0.anon_id) AS d0_users,
-				COUNT(DISTINCT d1.anon_id) AS d1_retained
+				COUNT(DISTINCT d1.anon_id) AS d1_retained,
+				COUNT(DISTINCT d7.anon_id) AS d7_retained,
+				COUNT(DISTINCT d14.anon_id) AS d14_retained
 			 FROM telemetry_daily d0
 			 LEFT JOIN telemetry_daily d1
 				ON d1.anon_id = d0.anon_id
 				AND d1.day = date(d0.day, '+1 day')
+			 LEFT JOIN telemetry_daily d7
+				ON d7.anon_id = d0.anon_id
+				AND d7.day = date(d0.day, '+7 day')
+			 LEFT JOIN telemetry_daily d14
+				ON d14.anon_id = d0.anon_id
+				AND d14.day = date(d0.day, '+14 day')
 			 WHERE d0.day BETWEEN ? AND ?
 			 GROUP BY d0.day
 			 ORDER BY d0.day DESC`,
 		)
 		.bind(retentionStart, today)
 		.all<TelemetryRetentionRow>();
-	const retentionMap = new Map<string, { d0: number; retained: number }>();
+	const retentionMap = new Map<string, { d0: number; d1: number; d7: number; d14: number }>();
 	for (const row of retentionRows.results ?? []) {
 		retentionMap.set(row.day, {
 			d0: Number(row.d0_users ?? 0),
-			retained: Number(row.d1_retained ?? 0),
+			d1: Number(row.d1_retained ?? 0),
+			d7: Number(row.d7_retained ?? 0),
+			d14: Number(row.d14_retained ?? 0),
 		});
 	}
 
 	const retention = retentionDays.map((day) => {
-		const row = retentionMap.get(day) ?? { d0: 0, retained: 0 };
-		const d1RetentionPct = row.d0 > 0 ? (row.retained / row.d0) * 100 : 0;
+		const row = retentionMap.get(day) ?? { d0: 0, d1: 0, d7: 0, d14: 0 };
+		const hasD1Window = shiftUtcDay(day, 1) <= today;
+		const hasD7Window = shiftUtcDay(day, 7) <= today;
+		const hasD14Window = shiftUtcDay(day, 14) <= today;
+		const r1 = hasD1Window && row.d0 > 0 ? row.d1 / row.d0 : null;
+		const r7 = hasD7Window && row.d0 > 0 ? row.d7 / row.d0 : null;
+		const r14 = hasD14Window && row.d0 > 0 ? row.d14 / row.d0 : null;
 		return {
 			day,
-			d0Users: row.d0,
-			d1Retained: row.retained,
-			d1RetentionPct,
+			d0: row.d0,
+			d1: row.d1,
+			d7: row.d7,
+			d14: row.d14,
+			r1,
+			r7,
+			r14,
 		};
 	});
+
+	const topCountriesRows = await env.DB
+		.prepare(
+			`SELECT
+				CASE
+					WHEN country IS NULL OR trim(country) = '' THEN 'unknown'
+					ELSE upper(substr(trim(country), 1, 8))
+				END AS country,
+				COUNT(*) AS sessions
+			 FROM telemetry_sessions
+			 WHERE substr(started_at, 1, 10) BETWEEN ? AND ?
+			 GROUP BY 1
+			 ORDER BY sessions DESC
+			 LIMIT 10`,
+		)
+		.bind(sevenDayStart, today)
+		.all<TelemetryCountryRow>();
+	const topCountries7d = (topCountriesRows.results ?? []).map((row) => ({
+		country: row.country || "unknown",
+		sessions: Number(row.sessions ?? 0),
+	}));
+
+	const topReferrersRows = await env.DB
+		.prepare(
+			`SELECT
+				CASE
+					WHEN referrer IS NULL OR trim(referrer) = '' THEN '(direct)'
+					ELSE lower(substr(trim(referrer), 1, 64))
+				END AS referrer,
+				COUNT(*) AS sessions
+			 FROM telemetry_sessions
+			 WHERE substr(started_at, 1, 10) BETWEEN ? AND ?
+			 GROUP BY 1
+			 ORDER BY sessions DESC
+			 LIMIT 10`,
+		)
+		.bind(sevenDayStart, today)
+		.all<TelemetryReferrerRow>();
+	const topReferrers7d = (topReferrersRows.results ?? []).map((row) => ({
+		referrer: row.referrer || "(direct)",
+		sessions: Number(row.sessions ?? 0),
+	}));
+
+	const endingTopRows = await env.DB
+		.prepare(
+			`SELECT ending_id, COUNT(*) AS count
+			 FROM runs
+			 WHERE substr(submitted_at_server, 1, 10) BETWEEN ? AND ?
+			 GROUP BY ending_id
+			 ORDER BY count DESC, ending_id ASC
+			 LIMIT 10`,
+		)
+		.bind(sevenDayStart, today)
+		.all<CountByEndingRow>();
+	const endingsTop = (endingTopRows.results ?? []).map((row) => ({
+		endingId: row.ending_id,
+		count: Number(row.count ?? 0),
+	}));
+
+	const stageBucketRows = await env.DB
+		.prepare(
+			`SELECT bucket, COUNT(*) AS count
+			 FROM (
+				SELECT
+					CASE
+						WHEN final_stage BETWEEN 1 AND 5 THEN '1-5'
+						WHEN final_stage BETWEEN 6 AND 10 THEN '6-10'
+						WHEN final_stage BETWEEN 11 AND 15 THEN '11-15'
+						WHEN final_stage BETWEEN 16 AND 20 THEN '16-20'
+						WHEN final_stage BETWEEN 21 AND 25 THEN '21-25'
+						WHEN final_stage BETWEEN 26 AND 30 THEN '26-30'
+						WHEN final_stage BETWEEN 31 AND 39 THEN '31-39'
+						ELSE '40+'
+					END AS bucket
+				FROM runs
+				WHERE substr(submitted_at_server, 1, 10) BETWEEN ? AND ?
+			 ) grouped
+			 GROUP BY bucket`,
+		)
+		.bind(sevenDayStart, today)
+		.all<StageBucketRow>();
+	const stageBucketCountMap = new Map<string, number>();
+	for (const row of stageBucketRows.results ?? []) {
+		stageBucketCountMap.set(row.bucket, Number(row.count ?? 0));
+	}
+	const stageBucketOrder = ["1-5", "6-10", "11-15", "16-20", "21-25", "26-30", "31-39", "40+"];
+	const stageBuckets = stageBucketOrder.map((bucket) => ({
+		bucket,
+		count: stageBucketCountMap.get(bucket) ?? 0,
+	}));
+
+	const creditsRows = await env.DB
+		.prepare(
+			`SELECT final_credits AS value
+			 FROM runs
+			 WHERE substr(submitted_at_server, 1, 10) BETWEEN ? AND ?
+			 ORDER BY final_credits ASC`,
+		)
+		.bind(sevenDayStart, today)
+		.all<NumericValueRow>();
+	const thighsRows = await env.DB
+		.prepare(
+			`SELECT final_thigh_cm AS value
+			 FROM runs
+			 WHERE substr(submitted_at_server, 1, 10) BETWEEN ? AND ?
+			 ORDER BY final_thigh_cm ASC`,
+		)
+		.bind(sevenDayStart, today)
+		.all<NumericValueRow>();
+	const creditsValues = (creditsRows.results ?? [])
+		.map((row) => Number(row.value))
+		.filter((value) => Number.isFinite(value) && value >= 0);
+	const thighValues = (thighsRows.results ?? [])
+		.map((row) => Number(row.value))
+		.filter((value) => Number.isFinite(value) && value >= 0);
 
 	return jsonResponse(
 		{
@@ -1053,9 +1301,19 @@ async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<R
 				dauToday,
 				dauYesterday,
 				dau7Avg,
+				wau7,
+				mau30,
+				stickiness,
+				newToday,
+				returningToday,
 				sessionsToday,
 				avgSessionMinutesToday,
+				bounceRateToday,
+				engagedRateToday,
+				sessionsPerDAU,
 				submitsToday,
+				submitPerDAUToday,
+				submitPerSessionToday,
 			},
 			sessionLengthToday: {
 				count: minutes.length,
@@ -1063,7 +1321,38 @@ async function handleAdminMetrics(env: AppEnv, origin: string | null): Promise<R
 				p50Minutes,
 				p90Minutes,
 			},
-			retention,
+			retention: {
+				windowDays: 14,
+				rows: retention,
+			},
+			topCountries7d,
+			topReferrers7d,
+			funnel: {
+				today: {
+					submits: submitsToday,
+					dau: dauToday,
+					sessions: sessionsToday,
+					submitPerDAU: submitPerDAUToday,
+					submitPerSession: submitPerSessionToday,
+				},
+				rolling7d: {
+					submits: submits7d,
+					dau: dau7d,
+					sessions: sessions7d,
+					submitPerDAU: submitPerDAU7d,
+					submitPerSession: submitPerSession7d,
+				},
+			},
+			runs7d: {
+				endingsTop,
+				stageBuckets,
+				creditsP50: percentileFromSorted(creditsValues, 0.5),
+				creditsP90: percentileFromSorted(creditsValues, 0.9),
+				creditsP99: percentileFromSorted(creditsValues, 0.99),
+				thighP50: percentileFromSorted(thighValues, 0.5),
+				thighP90: percentileFromSorted(thighValues, 0.9),
+				thighP99: percentileFromSorted(thighValues, 0.99),
+			},
 		},
 		200,
 		origin,
