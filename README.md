@@ -1,66 +1,49 @@
-# 유우카 키우기
+# 유우카 키우기 (Yuuka Grow)
 
-프론트(Vite + Phaser)와 리더보드 백엔드(Cloudflare Workers + D1)로 구성한 프로젝트다.
+턴제 육성 게임 + 리더보드/공유 기능을 가진 웹 프로젝트입니다.  
+프론트는 `Vite + Phaser + DOM UI`, 백엔드는 `Cloudflare Workers + D1`로 구성되어 있습니다.
 
-- 게임 본편: `index.html`
-- 정적 공유 페이지: `share.html`
-- 서버 OG 공유 페이지: `/share/:shareId`
+## 프로젝트 개요
+- 목표: 100일 생존과 허벅지 수치 성장
+- 플레이 방식: 하루 3턴(일하기/밥먹기/게스트) 선택형 턴제
+- 결과: 엔딩 선택, 점수 집계, 리더보드 업로드/공유
 
-## 주요 기능
-- Phaser 렌더 + DOM UI 기반 턴제 플레이
-- 게스트 연출, Eat/Work VFX, 단계별 사운드/배경 전환
-- 설정: `BGM / SFX / VOICE / Language / Nickname`
-- 결과 화면 `업로드 & 공유` 단일 버튼 플로우
-- 같은 run 중복 업로드 방지(`runId` 기반, 클라이언트 + 서버 idempotency)
-- 리더보드 화면(크레딧/허벅지 정렬 토글, Top 100)
+## 핵심 기능
+- **턴제 시뮬레이션 루프**: 스탯(크레딧/스트레스/허벅지) 기반 진행
+- **엔딩 시스템 + 엔딩 도감**: 우선순위 기반 엔딩 선택, 수집 상태 저장
+- **랜덤 버프 카드 시스템**: 스테이지 구간별 선택형 버프/디버프
+- **오디오 시스템**: BGM 카테고리 전환, 설정 연동(볼륨/음소거)
+- **온라인 연동**: 리더보드 제출, 공유 페이지(`/share/:shareId`)
+- **운영 도구**: `/admin`에서 점수 관리/메트릭 조회
 
-## 프론트 로컬 실행
-1. `npm install`
-2. 에셋을 변경했으면 manifest 갱신: `npm run build:assets-manifests`
-3. 개발 서버 실행: `npm run dev`
+## 기술 스택
+- Frontend: `TypeScript`, `Vite`, `Phaser`
+- Backend: `Cloudflare Workers`, `D1 (SQLite)`
+- Deploy: static frontend + Worker API
 
-## 에셋 Manifest 명령어
-- 전체 갱신: `npm run build:assets-manifests`
-- 게스트만 갱신: `npm run build:guests-manifest`
-- 음식만 갱신: `npm run build:food-manifest`
-- 업무만 갱신: `npm run build:work-manifest`
+## 로컬 실행 (핵심만)
+1. 루트에서 설치/실행
+```bash
+npm install
+npm run dev
+```
+2. 백엔드 서버 실행 (`server/`)
+```bash
+cd server
+npm install
+npm run dev
+```
 
-## BGM 압축 파이프라인 (Windows)
-1. ffmpeg 설치
-- `winget install --id Gyan.FFmpeg -e`
-- 설치 후 새 터미널에서 `ffmpeg -version`으로 확인
+## 빌드
+```bash
+npm run build
+```
+- 산출물: `dist/`
 
-2. 실행
-- `npm run bgm:encode`
-- 기본 입력: `C:\Users\임민우\Desktop\유우카키우기\asset_test\sound disc`
-- 기본 출력: `public/assets/bgm`
-- 기본 품질: LAME VBR `q=4` (`--q 3` 고음질, `--q 5` 소용량)
-
-3. 산출물
-- 인코딩된 MP3: `public/assets/bgm/*.mp3`
-- 매핑 파일: `public/assets/bgm/output_mapping.json`
-- 매니페스트: `public/assets/bgm/manifest.json`
-
-## 프론트 빌드
-1. 에셋을 변경했으면 `npm run build:assets-manifests` 실행
-2. `npm run build`
-3. `dist/` 생성
-4. `dist/index.html`, `dist/share.html` 포함
-
-## 서버(리더보드 API)
-- 위치: `server/`
-- 문서: `server/README.md`
-- 주요 엔드포인트:
+## 서버/배포 참고
+- 서버 상세 설정 및 D1 마이그레이션: `server/README.md`
+- 주요 API:
   - `POST /api/submit`
-  - `GET /api/leaderboard?sort=credit|thigh&limit=100`
+  - `POST /api/rank-preview`
+  - `GET /api/leaderboard`
   - `GET /share/:shareId`
-
-## 배포 메모
-- 프론트만 정적 호스팅으로도 동작한다.
-- 리더보드 업로드/조회/`/share/:shareId`는 Worker 배포가 필요하다.
-- 로컬에서 프론트(`vite`)만 실행하면 `/api/*`는 연결되지 않으니, Worker를 함께 띄우거나 프록시 구성이 필요하다.
-
-## 구현 메모
-- 설정 저장 키: `yuuka_settings_v1`
-- 구버전 설정 데이터 하위호환 로드
-- 언어 파라미터는 공유 링크에 넣지 않는다.
