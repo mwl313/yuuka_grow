@@ -494,6 +494,7 @@ textarea {
 }
 
 .lobby-visual {
+  position: relative;
   width: 100%;
   height: clamp(180px, 34vh, 300px);
   border-radius: 12px;
@@ -506,6 +507,46 @@ textarea {
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.lobby-dance-track {
+  width: 300%;
+  height: 100%;
+  display: flex;
+  transform: translate3d(-100%, 0, 0);
+  will-change: transform;
+}
+
+.lobby-dance-track.is-animating {
+  transition: transform 220ms ease;
+}
+
+.lobby-dance-track.is-dragging {
+  transition: none;
+}
+
+.lobby-visual-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 22, 36, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+  padding: 0;
+  font-size: 14px;
+}
+
+.lobby-visual-nav--prev {
+  left: 8px;
+}
+
+.lobby-visual-nav--next {
+  right: 8px;
 }
 
 .lobby-menu {
@@ -534,6 +575,7 @@ textarea {
 .lobby-dance {
   width: 100%;
   height: 100%;
+  flex: 0 0 100%;
   object-fit: contain;
   object-position: center;
   display: block;

@@ -68,7 +68,12 @@ interface UiRefs {
   leaderboard: HTMLElement;
   endingBook: HTMLElement;
   lobbyVisual: HTMLElement;
-  lobbyDance: HTMLImageElement;
+  lobbyDanceTrack: HTMLElement;
+  lobbyDancePrev: HTMLImageElement;
+  lobbyDanceCurrent: HTMLImageElement;
+  lobbyDanceNext: HTMLImageElement;
+  btnLobbyPrev: HTMLButtonElement;
+  btnLobbyNext: HTMLButtonElement;
   settingsModal: HTMLElement;
   nicknameModal: HTMLElement;
   creditsModal: HTMLElement;
@@ -248,6 +253,7 @@ const SCORE_RANK_PREVIEW_RETRY_DELAY_MS = 300;
 const SCORE_RANK_PREVIEW_MAX_ATTEMPTS = 2;
 const LOBBY_DANCE_ASSETS = ["/assets/lobby/yuuka1.gif", "/assets/lobby/yuuka2.gif", "/assets/lobby/yuuka3.gif"] as const;
 const LOBBY_SWIPE_THRESHOLD_PX = 32;
+const LOBBY_SWIPE_SNAP_MS = 220;
 const LOG_EMOJI_PREFIX: Record<"work" | "eat" | "guest" | "system", string> = {
   work: "💼 ",
   eat: "🍚 ",
@@ -299,8 +305,13 @@ export class UiController {
   private readonly cardSpinController: CardSpinController<BuffCardSelection>;
   private spinAudioContext: AudioContext | null = null;
   private lobbyDanceIndex = 0;
+  private lobbySwipePointerId: number | null = null;
   private lobbySwipeStartX: number | null = null;
   private lobbySwipeStartY: number | null = null;
+  private lobbySwipeCurrentX: number | null = null;
+  private lobbySwipeHorizontal = false;
+  private lobbySwipeAnimating = false;
+  private lobbySwipeSnapTimerId: number | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -317,10 +328,10 @@ export class UiController {
     this.applyLabels();
     this.bindEvents();
     this.syncSettingsUi();
-    this.setRandomLobbyDance();
     this.renderGameUi(true);
     this.renderLeaderboard();
     this.showScreen("lobby");
+    this.setRandomLobbyDance();
     onLanguageChange(() => this.handleLanguageChanged());
     saveData(this.save);
   }
@@ -334,7 +345,13 @@ export class UiController {
             <p id="lobby-version"></p>
             <p id="lobby-nickname" class="lobby-foot"></p>
             <div id="lobby-visual" class="lobby-visual">
-              <img id="lobby-dance" class="lobby-dance" src="/assets/lobby/yuuka1.gif" alt="" />
+              <div id="lobby-dance-track" class="lobby-dance-track">
+                <img id="lobby-dance-prev" class="lobby-dance" src="/assets/lobby/yuuka1.gif" alt="" draggable="false" />
+                <img id="lobby-dance-current" class="lobby-dance" src="/assets/lobby/yuuka1.gif" alt="" draggable="false" />
+                <img id="lobby-dance-next" class="lobby-dance" src="/assets/lobby/yuuka1.gif" alt="" draggable="false" />
+              </div>
+              <button id="btn-lobby-prev" class="lobby-visual-nav lobby-visual-nav--prev ui-btn ui-btn--icon font-title" type="button" aria-label="Previous image">&lt;</button>
+              <button id="btn-lobby-next" class="lobby-visual-nav lobby-visual-nav--next ui-btn ui-btn--icon font-title" type="button" aria-label="Next image">&gt;</button>
             </div>
             <div class="lobby-menu">
               <div class="lobby-quick-actions">
@@ -619,7 +636,12 @@ export class UiController {
       leaderboard: pick("screen-leaderboard"),
       endingBook: pick("screen-ending-book"),
       lobbyVisual: pick("lobby-visual"),
-      lobbyDance: pick("lobby-dance"),
+      lobbyDanceTrack: pick("lobby-dance-track"),
+      lobbyDancePrev: pick("lobby-dance-prev"),
+      lobbyDanceCurrent: pick("lobby-dance-current"),
+      lobbyDanceNext: pick("lobby-dance-next"),
+      btnLobbyPrev: pick("btn-lobby-prev"),
+      btnLobbyNext: pick("btn-lobby-next"),
       settingsModal: pick("settings-modal"),
       nicknameModal: pick("nickname-modal"),
       creditsModal: pick("credits-modal"),
@@ -1160,6 +1182,8 @@ export class UiController {
       this.refs.btnStart,
       this.refs.btnSettings,
       this.refs.btnLobbySound,
+      this.refs.btnLobbyPrev,
+      this.refs.btnLobbyNext,
       this.refs.btnNickname,
       this.refs.btnLeaderboard,
       this.refs.btnCredits,
@@ -1198,6 +1222,8 @@ export class UiController {
     this.refs.btnStart.addEventListener("click", () => this.startGame());
     this.refs.btnSettings.addEventListener("click", () => this.openSettings(true));
     this.refs.btnLobbySound.addEventListener("click", () => this.toggleMasterMute());
+    this.refs.btnLobbyPrev.addEventListener("click", () => this.showPreviousLobbyDance());
+    this.refs.btnLobbyNext.addEventListener("click", () => this.showNextLobbyDance());
     this.refs.btnNickname.addEventListener("click", () => this.openNicknameModal(true));
     this.refs.btnLeaderboard.addEventListener("click", () => {
       void this.openLeaderboard();
@@ -1245,34 +1271,49 @@ export class UiController {
       });
     });
 
-    this.refs.lobbyVisual.addEventListener(
-      "touchstart",
-      (event) => {
-        const touch = event.touches[0];
-        if (!touch) return;
-        this.lobbySwipeStartX = touch.clientX;
-        this.lobbySwipeStartY = touch.clientY;
-      },
-      { passive: true },
-    );
-    this.refs.lobbyVisual.addEventListener(
-      "touchend",
-      (event) => {
-        const touch = event.changedTouches[0];
-        if (!touch || this.lobbySwipeStartX === null || this.lobbySwipeStartY === null) {
-          this.lobbySwipeStartX = null;
-          this.lobbySwipeStartY = null;
-          return;
-        }
-        const deltaX = touch.clientX - this.lobbySwipeStartX;
-        const deltaY = touch.clientY - this.lobbySwipeStartY;
-        this.lobbySwipeStartX = null;
-        this.lobbySwipeStartY = null;
-        if (Math.abs(deltaX) < LOBBY_SWIPE_THRESHOLD_PX || Math.abs(deltaX) <= Math.abs(deltaY)) return;
-        this.showNextLobbyDance();
-      },
-      { passive: true },
-    );
+    this.refs.lobbyVisual.addEventListener("dragstart", (event) => {
+      event.preventDefault();
+    });
+    this.refs.lobbyVisual.addEventListener("pointerdown", (event) => {
+      if (this.lobbySwipeAnimating) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest(".lobby-visual-nav")) return;
+      this.lobbySwipePointerId = event.pointerId;
+      this.lobbySwipeStartX = event.clientX;
+      this.lobbySwipeStartY = event.clientY;
+      this.lobbySwipeCurrentX = event.clientX;
+      this.lobbySwipeHorizontal = false;
+      this.refs.lobbyDanceTrack.classList.add("is-dragging");
+      this.refs.lobbyVisual.setPointerCapture(event.pointerId);
+    });
+    this.refs.lobbyVisual.addEventListener("pointermove", (event) => {
+      if (this.lobbySwipePointerId !== event.pointerId || this.lobbySwipeStartX === null || this.lobbySwipeStartY === null) {
+        return;
+      }
+      this.lobbySwipeCurrentX = event.clientX;
+      const deltaX = event.clientX - this.lobbySwipeStartX;
+      const deltaY = event.clientY - this.lobbySwipeStartY;
+      if (!this.lobbySwipeHorizontal) {
+        if (Math.abs(deltaX) < 4) return;
+        if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+        this.lobbySwipeHorizontal = true;
+      }
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      this.setLobbyTrackOffset(deltaX);
+    });
+    this.refs.lobbyVisual.addEventListener("pointerup", (event) => {
+      this.finishLobbySwipe(event.pointerId);
+    });
+    this.refs.lobbyVisual.addEventListener("pointercancel", (event) => {
+      this.finishLobbySwipe(event.pointerId, true);
+    });
+    this.refs.lobbyVisual.addEventListener("lostpointercapture", () => {
+      if (this.lobbySwipePointerId !== null) {
+        this.finishLobbySwipe(this.lobbySwipePointerId, true);
+      }
+    });
     this.refs.btnRetry.addEventListener("click", () => this.retryGame());
     this.refs.btnBack.addEventListener("click", () => {
       void this.transitionToLobby();
@@ -1851,24 +1892,129 @@ export class UiController {
     if (screen === "lobby" && previousScreen !== "lobby") {
       this.setRandomLobbyDance();
     }
+    if (screen === "lobby" && !this.lobbySwipeAnimating) {
+      this.setLobbyTrackOffset(0);
+    }
     this.updateBgmContext();
   }
 
   private setRandomLobbyDance(): void {
+    this.clearLobbySwipeTimer();
+    this.lobbySwipeAnimating = false;
+    this.refs.lobbyDanceTrack.classList.remove("is-animating");
     const nextIndex = Math.floor(Math.random() * LOBBY_DANCE_ASSETS.length);
     this.applyLobbyDanceIndex(nextIndex);
+    this.setLobbyTrackOffset(0);
   }
 
   private showNextLobbyDance(): void {
-    this.applyLobbyDanceIndex(this.lobbyDanceIndex + 1);
+    this.navigateLobbyDance(1);
+  }
+
+  private showPreviousLobbyDance(): void {
+    this.navigateLobbyDance(-1);
   }
 
   private applyLobbyDanceIndex(nextIndex: number): void {
     const normalized = ((nextIndex % LOBBY_DANCE_ASSETS.length) + LOBBY_DANCE_ASSETS.length) % LOBBY_DANCE_ASSETS.length;
     this.lobbyDanceIndex = normalized;
-    const nextSrc = LOBBY_DANCE_ASSETS[normalized];
-    if (this.refs.lobbyDance.getAttribute("src") === nextSrc) return;
-    this.refs.lobbyDance.setAttribute("src", nextSrc);
+    this.updateLobbyDanceSlots();
+  }
+
+  private updateLobbyDanceSlots(): void {
+    const current = LOBBY_DANCE_ASSETS[this.lobbyDanceIndex];
+    const prev =
+      LOBBY_DANCE_ASSETS[
+        (this.lobbyDanceIndex - 1 + LOBBY_DANCE_ASSETS.length) % LOBBY_DANCE_ASSETS.length
+      ];
+    const next = LOBBY_DANCE_ASSETS[(this.lobbyDanceIndex + 1) % LOBBY_DANCE_ASSETS.length];
+    if (this.refs.lobbyDancePrev.getAttribute("src") !== prev) {
+      this.refs.lobbyDancePrev.setAttribute("src", prev);
+    }
+    if (this.refs.lobbyDanceCurrent.getAttribute("src") !== current) {
+      this.refs.lobbyDanceCurrent.setAttribute("src", current);
+    }
+    if (this.refs.lobbyDanceNext.getAttribute("src") !== next) {
+      this.refs.lobbyDanceNext.setAttribute("src", next);
+    }
+  }
+
+  private setLobbyTrackOffset(deltaX: number): void {
+    const width = this.refs.lobbyVisual.clientWidth || 1;
+    const x = -width + deltaX;
+    this.refs.lobbyDanceTrack.style.transform = `translate3d(${Math.round(x)}px, 0, 0)`;
+  }
+
+  private getLobbySwipeThreshold(): number {
+    const width = this.refs.lobbyVisual.clientWidth || 0;
+    return Math.max(LOBBY_SWIPE_THRESHOLD_PX, Math.round(width * 0.16));
+  }
+
+  private clearLobbySwipeTimer(): void {
+    if (this.lobbySwipeSnapTimerId !== null) {
+      window.clearTimeout(this.lobbySwipeSnapTimerId);
+      this.lobbySwipeSnapTimerId = null;
+    }
+  }
+
+  private navigateLobbyDance(step: -1 | 1): void {
+    if (this.lobbySwipeAnimating) return;
+    this.snapLobbyTrack(step);
+  }
+
+  private snapLobbyTrack(step: -1 | 0 | 1): void {
+    const width = this.refs.lobbyVisual.clientWidth || 1;
+    const targetDelta = step === 0 ? 0 : step > 0 ? -width : width;
+    this.clearLobbySwipeTimer();
+    this.lobbySwipeAnimating = true;
+    this.refs.lobbyDanceTrack.classList.remove("is-dragging");
+    this.refs.lobbyDanceTrack.classList.add("is-animating");
+    this.setLobbyTrackOffset(targetDelta);
+    this.lobbySwipeSnapTimerId = window.setTimeout(() => {
+      this.lobbySwipeSnapTimerId = null;
+      if (step !== 0) {
+        this.applyLobbyDanceIndex(this.lobbyDanceIndex + step);
+      }
+      this.refs.lobbyDanceTrack.classList.remove("is-animating");
+      this.setLobbyTrackOffset(0);
+      this.lobbySwipeAnimating = false;
+    }, LOBBY_SWIPE_SNAP_MS);
+  }
+
+  private finishLobbySwipe(pointerId: number, canceled = false): void {
+    if (this.lobbySwipePointerId !== pointerId) return;
+    const startX = this.lobbySwipeStartX;
+    const currentX = this.lobbySwipeCurrentX;
+    const wasHorizontal = this.lobbySwipeHorizontal;
+    this.resetLobbySwipeState();
+    if (canceled || startX === null || currentX === null) {
+      this.setLobbyTrackOffset(0);
+      return;
+    }
+    const deltaX = currentX - startX;
+    if (!wasHorizontal) {
+      this.setLobbyTrackOffset(0);
+      return;
+    }
+    const threshold = this.getLobbySwipeThreshold();
+    if (Math.abs(deltaX) >= threshold) {
+      this.snapLobbyTrack(deltaX < 0 ? 1 : -1);
+      return;
+    }
+    this.snapLobbyTrack(0);
+  }
+
+  private resetLobbySwipeState(): void {
+    const pointerId = this.lobbySwipePointerId;
+    if (pointerId !== null && this.refs.lobbyVisual.hasPointerCapture(pointerId)) {
+      this.refs.lobbyVisual.releasePointerCapture(pointerId);
+    }
+    this.lobbySwipePointerId = null;
+    this.lobbySwipeStartX = null;
+    this.lobbySwipeStartY = null;
+    this.lobbySwipeCurrentX = null;
+    this.lobbySwipeHorizontal = false;
+    this.refs.lobbyDanceTrack.classList.remove("is-dragging");
   }
 
   private async openLeaderboard(): Promise<void> {
